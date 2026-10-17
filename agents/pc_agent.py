@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime
 import os
 import shutil
 import subprocess
@@ -19,8 +20,26 @@ import urllib.request
 import uuid
 import webbrowser
 from pathlib import Path
+from typing import Any
 
 from agents.common import HubClient, envelope
+
+PC_LOG_FILE = Path("logs/pc_agent.log")
+
+
+def pc_log(stage: str, msg: str, **extra: Any) -> None:
+    """Detailed timestamped diagnostic logger for PC agent actions."""
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    ext_str = f" | {extra}" if extra else ""
+    line = f"[{now}] [{stage:<18}] {msg}{ext_str}"
+    print(line, flush=True)
+    try:
+        PC_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(PC_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
 
 TEMP_SUFFIXES = (".crdownload", ".part", ".download", ".partial", ".opdownload")
 
@@ -141,11 +160,15 @@ class PCAgent:
 
     def result(self, action_id: str | None, ok: bool, output: str) -> None:
         if action_id:
-            print(f"[pc_agent] Sending result for action {action_id} (ok={ok}): {output[:60]}...", flush=True)
+            pc_log("RESULT_DISPATCH", f"Sending result for action {action_id} (ok={ok}): {output[:100]}...",
+                   action_id=action_id, ok=ok, output=output)
             self.client.send_threadsafe({"kind": "result", "action_id": action_id, "ok": ok, "output": output})
 
     async def on_message(self, msg: dict) -> None:
         kind, text, a = msg.get("kind"), msg.get("text", ""), msg.get("args", {})
+        action_id = msg.get("action_id")
+        pc_log("INBOUND_MESSAGE", f"Received command '{kind}' from hub (action_id={action_id})",
+               kind=kind, action_id=action_id, text=text, args=a)
         if kind == "ack":
             return
         if kind == "alert":
@@ -155,33 +178,35 @@ class PCAgent:
         elif kind == "open":
             if a.get("path") and os.path.exists(a["path"]):
                 os.startfile(a["path"])  # type: ignore[attr-defined]  (Windows only)
+                self.result(action_id, True, f"Opened {a['path']}")
             elif a.get("url"):
                 webbrowser.open(a["url"])
+                self.result(action_id, True, f"Opened {a['url']}")
             else:
-                print(f"cannot open {a}")
+                pc_log("OPEN_ERROR", f"Cannot open target: {a}", args=a)
+                self.result(action_id, False, f"Cannot open: {a}")
         elif kind == "download":
-            threading.Thread(target=self.download, args=(a, msg.get("action_id")), daemon=True).start()
+            threading.Thread(target=self.download, args=(a, action_id), daemon=True).start()
         elif kind == "exec":
-            threading.Thread(target=self.exec, args=(a["cmd"], msg.get("action_id")), daemon=True).start()
+            threading.Thread(target=self.exec, args=(a["cmd"], action_id), daemon=True).start()
         elif kind == "delete":
-            self.delete(a["path"], msg.get("action_id"))
+            self.delete(a["path"], action_id)
         elif kind == "status_request":
             threading.Thread(target=self.send_status, daemon=True).start()
         elif kind == "upload":
-            threading.Thread(target=self.upload, args=(a, msg.get("action_id")), daemon=True).start()
+            threading.Thread(target=self.upload, args=(a, action_id), daemon=True).start()
         elif kind == "clipboard_get":
-            threading.Thread(target=self.clipboard_get, args=(msg.get("action_id"),), daemon=True).start()
+            threading.Thread(target=self.clipboard_get, args=(action_id,), daemon=True).start()
         elif kind == "clipboard_set":
             self.clipboard_set(a.get("text", ""))
         elif kind == "type_message":
-            threading.Thread(target=self.type_message, args=(a, msg.get("action_id")), daemon=True).start()
+            threading.Thread(target=self.type_message, args=(a, action_id), daemon=True).start()
         elif kind == "screenshot":
-            threading.Thread(target=self.take_screenshot, args=(a, msg.get("action_id")), daemon=True).start()
+            threading.Thread(target=self.take_screenshot, args=(a, action_id), daemon=True).start()
         elif kind == "notifications_get":
-            print(f"[pc_agent] Processing notifications_get action_id={msg.get('action_id')}", flush=True)
-            threading.Thread(target=self.get_notifications, args=(a, msg.get("action_id")), daemon=True).start()
+            threading.Thread(target=self.get_notifications, args=(a, action_id), daemon=True).start()
         else:
-            print(f"unknown message: {msg}", flush=True)
+            pc_log("UNKNOWN_KIND", f"Unknown message kind from hub: {msg}", msg=msg)
 
     def upload(self, a: dict, action_id: str | None) -> None:
         """Send a local file to the hub for a cross-device handoff (the hub reports success itself)."""
@@ -328,9 +353,12 @@ class PCAgent:
         app_name = (a.get("app") or "").strip()
         press_enter = bool(a.get("press_enter", True))
 
+        pc_log("TYPE_MSG_START", f"Target app='{app_name}', recipient='{recipient}', press_enter={press_enter}",
+               app=app_name, recipient=recipient, text_len=len(text), action_id=action_id)
         try:
             # 1. Focus application window natively (handles minimized/tray state, Qt/Electron apps, Unicode titles)
             focused = self._focus_window(app_name)
+            pc_log("TYPE_MSG_FOCUS", f"Native focus result for '{app_name}': {focused}", focused=focused, action_id=action_id)
             app_clean = app_name.replace("'", "''").strip()
 
             # 2. If recipient specified: ensure window is active, search contact (Ctrl+F), select chat (Enter)
@@ -371,6 +399,7 @@ Start-Sleep -Milliseconds 500
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 if res.returncode != 0:
                     err = res.stderr.strip() or f"Failed to activate '{app_name}' or select '{recipient}'"
+                    pc_log("TYPE_MSG_SEARCH_FAIL", f"Contact search failed: {err}", returncode=res.returncode, stderr=err, action_id=action_id)
                     self.result(action_id, False, err)
                     return
 
@@ -408,13 +437,17 @@ if ({'$true' if press_enter else '$false'}) {{
                                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 if proc.returncode != 0:
                     err = proc.stderr.strip() or f"Failed to paste into '{app_name}'"
+                    pc_log("TYPE_MSG_PASTE_FAIL", f"Message paste failed: {err}", returncode=proc.returncode, stderr=err, action_id=action_id)
                     self.result(action_id, False, err)
                     return
 
             dest = f"{app_name}" if app_name else "active window"
             who = f" to {recipient}" if recipient else ""
-            self.result(action_id, True, f"Typed and {'sent' if press_enter else 'pasted'} message{who} in {dest}")
+            msg_ok = f"Typed and {'sent' if press_enter else 'pasted'} message{who} in {dest}"
+            pc_log("TYPE_MSG_SUCCESS", msg_ok, action_id=action_id)
+            self.result(action_id, True, msg_ok)
         except Exception as exc:
+            pc_log("TYPE_MSG_EXCEPTION", f"Unexpected error: {exc!r}", error=repr(exc), action_id=action_id)
             self.result(action_id, False, repr(exc))
 
     def get_notifications(self, a: dict, action_id: str | None) -> None:
@@ -426,9 +459,12 @@ if ({'$true' if press_enter else '$false'}) {{
         target_app = (a.get("app") or "").strip().lower()
         query = (a.get("query") or "").strip().lower()
         limit = int(a.get("limit") or 10)
+        pc_log("NOTIF_START", f"Reading notifications (app='{target_app}', query='{query}', limit={limit})",
+               app=target_app, query=query, limit=limit, action_id=action_id)
 
         db_path = os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db")
         if not os.path.exists(db_path):
+            pc_log("NOTIF_ERR_NODB", f"wpndatabase.db not found at {db_path}", db_path=db_path, action_id=action_id)
             self.result(action_id, False, "Windows notification database not found")
             return
 
@@ -448,6 +484,7 @@ if ({'$true' if press_enter else '$false'}) {{
             cur.execute(sql)
             rows = cur.fetchall()
             con.close()
+            pc_log("NOTIF_DB_READ", f"Read {len(rows)} raw rows from wpndatabase.db", count=len(rows), action_id=action_id)
 
             results = []
             for arr_time, app_id, payload in rows:
@@ -487,11 +524,15 @@ if ({'$true' if press_enter else '$false'}) {{
 
             if not results:
                 filter_info = f" matching '{query or target_app}'" if (query or target_app) else ""
-                self.result(action_id, True, f"No recent PC notifications found{filter_info}.")
+                msg_empty = f"No recent PC notifications found{filter_info}."
+                pc_log("NOTIF_EMPTY", msg_empty, action_id=action_id)
+                self.result(action_id, True, msg_empty)
             else:
                 formatted = f"Found {len(results)} notification(s):\n" + "\n".join(results)
+                pc_log("NOTIF_SUCCESS", f"Extracted {len(results)} matching notifications", count=len(results), action_id=action_id)
                 self.result(action_id, True, formatted)
         except Exception as exc:
+            pc_log("NOTIF_EXCEPTION", f"Failed reading notifications: {exc!r}", error=repr(exc), action_id=action_id)
             self.result(action_id, False, f"Failed reading notifications: {exc!r}")
         finally:
             try:
@@ -502,10 +543,11 @@ if ({'$true' if press_enter else '$false'}) {{
 
     def take_screenshot(self, a: dict, action_id: str | None) -> None:
         """Capture the PC desktop screen and save to the sandbox folder."""
+        dest_dir = Path(a.get("dest") or self.sandbox)
+        pc_log("SCREENSHOT_START", f"Capturing desktop screenshot to {dest_dir}", dest_dir=str(dest_dir), action_id=action_id)
         try:
             ts = int(time.time())
             filename = f"screenshot_{ts}.png"
-            dest_dir = Path(a.get("dest") or self.sandbox)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_path = dest_dir / filename
 
@@ -525,12 +567,16 @@ $bmp.Dispose()
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             if res.returncode == 0 and dest_path.is_file():
                 kb = round(dest_path.stat().st_size / 1024, 1)
-                self.result(action_id, True, f"Screenshot captured and saved to {dest_path} ({kb} KB)")
+                msg_ok = f"Screenshot captured and saved to {dest_path} ({kb} KB)"
+                pc_log("SCREENSHOT_SUCCESS", msg_ok, path=str(dest_path), kb=kb, action_id=action_id)
+                self.result(action_id, True, msg_ok)
                 self.emit("file.created", {"path": str(dest_path), "name": filename, "type": "screenshot", "size": dest_path.stat().st_size})
             else:
                 err = res.stderr.strip() or "Failed to capture screenshot"
+                pc_log("SCREENSHOT_FAIL", f"Failed: {err}", returncode=res.returncode, stderr=err, action_id=action_id)
                 self.result(action_id, False, err)
         except Exception as exc:
+            pc_log("SCREENSHOT_EXCEPTION", f"Unexpected error: {exc!r}", error=repr(exc), action_id=action_id)
             self.result(action_id, False, repr(exc))
 
     def history_loop(self) -> None:
@@ -564,14 +610,25 @@ $bmp.Dispose()
                 os.remove(tmp)
 
     def exec(self, cmd: str, action_id: str | None) -> None:
+        pc_log("EXEC_START", f"Executing shell command: {cmd}", cmd=cmd, sandbox=str(self.sandbox), action_id=action_id)
         try:
+            cwd = str(self.sandbox) if self.sandbox.exists() else None
             proc = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True,
-                                  timeout=60)
-            out, code = (proc.stdout or proc.stderr)[-2000:], proc.returncode
+                                  timeout=60, cwd=cwd)
+            stdout = (proc.stdout or "").strip()
+            stderr = (proc.stderr or "").strip()
+            code = proc.returncode
+            if stdout and stderr:
+                out = f"{stdout}\n[STDERR]\n{stderr}"
+            else:
+                out = stdout or stderr or "(command completed with no output)"
+            pc_log("EXEC_DONE", f"Command completed with exit code {code}", cmd=cmd, exit_code=code,
+                   stdout_chars=len(stdout), stderr_chars=len(stderr), action_id=action_id)
         except Exception as exc:
-            out, code = repr(exc), -1
-        print(f"$ {cmd}\n{out}")
-        self.emit("command.run", {"cmd": cmd, "exit_code": code, "stdout": out}, source="shell")
+            out, code = f"Execution failed: {exc!r}", -1
+            pc_log("EXEC_EXCEPTION", f"Command raised exception: {exc!r}", cmd=cmd, error=repr(exc), action_id=action_id)
+        print(f"$ {cmd}\n[Exit {code}]: {out}", flush=True)
+        self.emit("command.run", {"cmd": cmd, "exit_code": code, "stdout": out[:2000]}, source="shell")
         self.result(action_id, code == 0, out)
 
     def delete(self, path: str, action_id: str | None) -> None:

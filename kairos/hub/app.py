@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from kairos.config import load_settings
+from kairos.diag import clear_diagnostics, diag_log, get_diagnostic_events, get_diagnostic_text
 from kairos.models import EventEnvelope, Outbound
 from kairos.timeutil import MINUTE_MS, now_ms
 
@@ -69,7 +70,11 @@ class HubGateway:
         if simulated:
             self.fallback.send(msg)
         self.outbox.append({"seq": next(self._seq), "ts": now_ms(), "device_id": msg.device_id, "kind": msg.kind,
-                            "text": msg.text, "args": msg.args, "delivered": delivered, "simulated": simulated})
+                            "text": msg.text, "args": msg.args, "delivered": delivered, "simulated": simulated,
+                            "action_id": msg.action_id})
+        diag_log("GATEWAY_SEND", f"Dispatched {msg.kind} to {msg.device_id} (action_id={msg.action_id}, delivered={delivered})",
+                 device_id=msg.device_id, kind=msg.kind, action_id=msg.action_id, text=msg.text,
+                 args=msg.args, delivered=delivered, simulated=simulated)
         return delivered or simulated
 
     def push(self, device_id: str, payload: dict, quiet: bool = False) -> bool:
@@ -262,7 +267,11 @@ async def post_event(env: EventEnvelope) -> dict:
 
 @app.post("/chat")
 async def chat(body: ChatIn) -> dict:
+    diag_log("USER_INPUT", f"User request from {body.device_id}: \"{body.text}\"",
+             device_id=body.device_id, text=body.text, session_id=body.session_id)
     reply = await run_in_threadpool(_k().chat, body.text, body.device_id, body.session_id)
+    diag_log("AGENT_REPLY", f"Replied to {body.device_id}: \"{reply.text[:140]}\"",
+             reply=reply.text, actions=reply.actions, planner=reply.planner)
     return {"reply": reply.text, "actions": reply.actions, "data": reply.data, "planner": reply.planner}
 
 
@@ -705,6 +714,8 @@ async def device_socket(ws: WebSocket, device_id: str, token: str = Query("")) -
                 reply = await run_in_threadpool(k.chat, msg["text"], device_id, msg.get("session_id"))
                 gateway.push(device_id, {"kind": "speak", "device_id": device_id, "text": reply.text})
             elif kind == "result" and msg.get("action_id"):
+                diag_log("DEVICE_RESULT", f"Device {device_id} reported action {msg.get('action_id')} (ok={msg.get('ok')}): {str(msg.get('output', ''))[:140]}",
+                         device_id=device_id, action_id=msg.get("action_id"), ok=bool(msg.get("ok")), output=str(msg.get("output", "")))
                 await run_in_threadpool(k.device_result, msg["action_id"], bool(msg.get("ok")), str(msg.get("output", "")))
     except WebSocketDisconnect:
         pass
@@ -714,3 +725,22 @@ async def device_socket(ws: WebSocket, device_id: str, token: str = Query("")) -
             await sender
         gateway.disconnect(device_id)
         await run_in_threadpool(k.graph.run, "set_device_online", device_id=device_id, online=False, now=now_ms())
+
+
+@app.get("/api/diagnostics")
+async def api_diagnostics(limit: int = 100, stage: str | None = None) -> dict:
+    """Retrieve structured diagnostic log events for real-time monitoring and debugging."""
+    return {"events": get_diagnostic_events(limit=limit, stage=stage)}
+
+
+@app.get("/api/diagnostics/text")
+async def api_diagnostics_text(limit: int = 100) -> Response:
+    """Retrieve plain text human-readable diagnostics log."""
+    return Response(content=get_diagnostic_text(limit=limit), media_type="text/plain; charset=utf-8")
+
+
+@app.post("/api/diagnostics/clear")
+async def api_diagnostics_clear() -> dict:
+    """Clear memory ring buffer and truncate diagnostics.log."""
+    clear_diagnostics()
+    return {"status": "cleared"}
