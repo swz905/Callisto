@@ -141,6 +141,7 @@ class PCAgent:
 
     def result(self, action_id: str | None, ok: bool, output: str) -> None:
         if action_id:
+            print(f"[pc_agent] Sending result for action {action_id} (ok={ok}): {output[:60]}...", flush=True)
             self.client.send_threadsafe({"kind": "result", "action_id": action_id, "ok": ok, "output": output})
 
     async def on_message(self, msg: dict) -> None:
@@ -177,9 +178,10 @@ class PCAgent:
         elif kind == "screenshot":
             threading.Thread(target=self.take_screenshot, args=(a, msg.get("action_id")), daemon=True).start()
         elif kind == "notifications_get":
+            print(f"[pc_agent] Processing notifications_get action_id={msg.get('action_id')}", flush=True)
             threading.Thread(target=self.get_notifications, args=(a, msg.get("action_id")), daemon=True).start()
         else:
-            print(f"unknown message: {msg}")
+            print(f"unknown message: {msg}", flush=True)
 
     def upload(self, a: dict, action_id: str | None) -> None:
         """Send a local file to the hub for a cross-device handoff (the hub reports success itself)."""
