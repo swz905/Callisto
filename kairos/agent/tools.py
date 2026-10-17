@@ -187,7 +187,8 @@ TOOL_SPECS: dict[str, tuple[str, str, dict]] = {
     "find_path": ("read", "How two people/places/files/apps are connected in memory.",
                   _obj(["a", "b"], a=_s("First name/thing"), b=_s("Second name/thing"))),
     "list_watchers": ("read", "What KAIROS is currently watching for.", _obj()),
-    "cancel_watchers": ("watcher.create", "Cancel all active watchers/reminders.", _obj()),
+    "cancel_watchers": ("watcher.create", "Cancel active watchers/reminders. Optionally filter by topic/description keyword (e.g. 'kettle', 'oven'). If omitted or 'all', cancels all.",
+                        _obj(query=_s("Optional keyword to cancel only matching reminders, e.g. 'kettle'"))),
     "help": ("read", "What KAIROS can do.", _obj()),
 }
 ACTION_TOOLS = [n for n, (cap, _, _) in TOOL_SPECS.items() if cap != "read"] + ["notify"]
@@ -350,7 +351,18 @@ class Toolbox:
             return ToolResult("I'm not watching for anything right now.")
         return ToolResult("I'm watching for: " + "; ".join(r["description"] for r in rows) + ".", {"watchers": rows})
 
-    def t_cancel_watchers(self, turn: Turn) -> ToolResult:
+    def t_cancel_watchers(self, turn: Turn, query: str | None = None) -> ToolResult:
+        if query and query.strip().lower() not in ("all", "*", "everything"):
+            q = query.strip().lower()
+            active = self.k.watchers.list_active()
+            matching = [w for w in active if q in (w.get("description") or "").lower() or q in (w.get("message") or "").lower()]
+            if not matching:
+                return ToolResult(f"No active reminders matched '{query}'.")
+            cancelled = 0
+            for w in matching:
+                if self.k.watchers.cancel(w["id"]):
+                    cancelled += 1
+            return ToolResult(f"Cancelled {cancelled} reminder{'s' if cancelled != 1 else ''} matching '{query}'.")
         n = self.k.watchers.cancel()
         return ToolResult(f"Cancelled {n} reminder{'s' if n != 1 else ''}.")
 
@@ -809,7 +821,7 @@ class Toolbox:
             action_id=turn.action_id
         ))
         if turn.action_id and hasattr(self.k, "wait_for_device_result"):
-            res = self.k.wait_for_device_result(turn.action_id, timeout=4.0)
+            res = self.k.wait_for_device_result(turn.action_id, timeout=7.0)
             if res:
                 ok, output = res
                 return ToolResult(output, {"text": message, "recipient": recipient, "app": app,

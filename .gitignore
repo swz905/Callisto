@@ -17,4 +17,5 @@ VPS_ACCESS.txt
 create_shortcut.ps1
 logs/
 *.log
+scratch/
 

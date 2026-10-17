@@ -29,10 +29,16 @@ YES = re.compile(r"^(yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please
 NO = re.compile(r"^(no|nope|cancel|don't|do not|stop|never mind|nevermind)\b", re.I)
 
 
+CANCEL_COMMAND = re.compile(r"^cancel\s+(all|my|the|this|that\s+\w+|watcher|reminder|alarm|meeting|task|download)\b", re.I)
+
+
 def confirmation(text: str) -> bool | None:
     """True/False for a yes/no reply, None otherwise. Kept deterministic: never left to the LLM."""
     t = _norm(text)
+    if CANCEL_COMMAND.search(t):
+        return None
     return True if YES.match(t) else False if NO.match(t) else None
+
 
 
 def _norm(text: str) -> str:

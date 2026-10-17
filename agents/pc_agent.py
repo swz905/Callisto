@@ -129,6 +129,7 @@ class DownloadWatcher:
             return
         download_id, url = self.claims.pop(path, (f"dl-{uuid.uuid4().hex[:8]}", None))
         self.ids[path] = (download_id, url)
+        pc_log("DOWNLOAD_START", f"Detected new download starting: {Path(path).name} (id={download_id})", path=path, id=download_id)
         self.emit("download.started", {"download_id": download_id, "filename": strip_temp(Path(path).name),
                                        "url": url})
 
@@ -140,6 +141,7 @@ class DownloadWatcher:
             self.ids[dest] = (download_id, url)
             return
         size = os.path.getsize(dest) if os.path.exists(dest) else None
+        pc_log("DOWNLOAD_DONE", f"Download finished: {Path(dest).name} ({size} bytes, id={download_id})", path=dest, size=size, id=download_id)
         self.emit("download.completed", {"download_id": download_id, "filename": Path(dest).name, "path": dest,
                                          "bytes": size, "url": url or zone_url(dest)})
 
