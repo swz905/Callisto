@@ -11,3 +11,8 @@ NEW_FEATURES.txt
 *.png
 !docs/*.png
 avatar_crop.png
+*.key
+VPS_ACCESS.txt
+*.tar.gz
+create_shortcut.ps1
+

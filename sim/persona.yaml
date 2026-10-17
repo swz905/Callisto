@@ -1,0 +1,105 @@
+# Synthetic demo persona. No real personal data goes into the graph.
+user:
+  id: arjun
+  name: Arjun Mehta
+  tz: Asia/Kolkata
+
+devices:
+  - {id: phone-arjun, kind: phone, name: "Arjun's Pixel"}
+  - {id: pc-main, kind: pc, name: "Arjun's laptop"}
+  - {id: telegram-arjun, kind: chat, name: "Telegram"}
+
+people:
+  - {id: person-rahul, name: Rahul Sharma, aliases: [Rahul], relation: manager}
+  - {id: person-priya, name: Priya Mehta, aliases: [Priya], relation: sister}
+  - {id: person-karan, name: Karan Gupta, aliases: [Karan], relation: colleague}
+
+# Geofences for place watchers ("remind me when I leave the office"). Coordinates are illustrative.
+places:
+  - {id: place-home, name: Home, kind: home, lat: 28.4211, lon: 77.0717, radius_m: 250}
+  - {id: place-office, name: Office, kind: office, lat: 28.4595, lon: 77.0950, radius_m: 300}
+
+facts:
+  - {key: office_location, statement: "Your office is at Golf Course Road"}
+  - {key: home_location, statement: "You live in Sector 56, Gurugram"}
+
+notes:
+  - {text: "Rahul prefers short decks with the numbers up front", about: [Rahul Sharma]}
+
+# Capability risk tiers: 0 read/notify, 1 low-risk write, 2 needs care, 3 always confirm.
+capabilities:
+  - {name: read, risk: 0, description: "Read the graph"}
+  - {name: notify, risk: 0, description: "Show an alert or speak"}
+  - {name: watcher.create, risk: 1, description: "Create or cancel watchers"}
+  - {name: memory.write, risk: 1, description: "Remember a fact, note or task"}
+  - {name: memory.forget, risk: 2, description: "Archive memories"}
+  - {name: memory.share, risk: 1, description: "Share with the family graph"}
+  - {name: file.open, risk: 1, description: "Open a local file"}
+  - {name: link.open, risk: 1, description: "Open a link someone sent"}
+  - {name: net.download, risk: 1, description: "Download a file"}
+  - {name: file.transfer, risk: 1, description: "Send a file to another device"}
+  - {name: clipboard, risk: 1, description: "Read/copy the clipboard between devices"}
+  - {name: shell.read, risk: 1, description: "Run an allowlisted read-only command"}
+  - {name: shell.exec, risk: 3, description: "Run any shell command"}
+  - {name: file.delete, risk: 3, description: "Delete files"}
+  - {name: net.search, risk: 0, description: "Search the web (read-only)"}
+  - {name: net.read, risk: 1, description: "Read a web page we already know about (search result, link you got)"}
+  - {name: net.read_unknown, risk: 2, description: "Read a web page from an address nobody gave us"}
+
+# Device -> capability -> mode (auto / confirm / deny). Missing edge = deny.
+# Requests that come in through a remote channel (Telegram) use the stricter of the channel's rule and the
+# target device's rule: e.g. "run X on my PC" from Telegram always asks first.
+permissions:
+  pc-main:
+    net.search: auto
+    net.read: auto
+    net.read_unknown: confirm
+    read: auto
+    notify: auto
+    watcher.create: auto
+    memory.write: auto
+    memory.forget: confirm
+    memory.share: auto
+    file.open: auto
+    link.open: auto
+    net.download: auto
+    file.transfer: auto
+    clipboard: auto
+    shell.read: auto
+    shell.exec: confirm
+    file.delete: confirm
+  phone-arjun:
+    net.search: auto
+    net.read: auto
+    net.read_unknown: confirm
+    read: auto
+    notify: auto
+    watcher.create: auto
+    memory.write: auto
+    memory.forget: confirm
+    memory.share: auto
+    file.open: auto
+    link.open: auto
+    net.download: confirm
+    file.transfer: auto
+    clipboard: auto
+    shell.read: confirm
+    # no shell.exec / file.delete on the phone: denied
+  telegram-arjun:
+    net.search: auto
+    net.read: auto
+    net.read_unknown: confirm
+    read: auto
+    notify: auto
+    watcher.create: auto
+    memory.write: auto
+    memory.forget: confirm
+    memory.share: confirm
+    file.open: confirm
+    link.open: confirm
+    net.download: confirm
+    file.transfer: confirm
+    clipboard: confirm
+    shell.read: confirm
+    shell.exec: confirm
+    file.delete: confirm

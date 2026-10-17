@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "kairos"
 version = "0.1.0"
 description = "Voice-first, cross-device personal agent whose memory is a FalkorDB graph"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "falkordb>=1.0",
   "fastapi>=0.110",

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KAIROS · dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">◆</span> KAIROS <span class="muted" id="graphName"></span></div>
+    <div class="status">
+      <button id="f9Btn" class="btnlink" style="font-size:12px; background:#238636; color:#fff; border:none; padding:4px 10px; border-radius:6px; cursor:pointer; font-weight:600; display:inline-flex; align-items:center; gap:4px;" title="Activate Assistant & Review Updates (F9 or Ctrl+Shift+K)">⚡ F9: Activate</button>
+      <span id="llmBadge" class="badge">LLM …</span>
+      <span id="devices"></span>
+      <span id="counts" class="muted small"></span>
+      <a href="/architecture" target="_blank" class="btnlink ghost" style="font-size:12px; margin-left:8px;" title="Interactive Architecture & Presentation">🏛 Architecture</a>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- chat -->
+    <section class="panel chat">
+      <div class="panel-head">
+        <h2>Talk to KAIROS</h2>
+        <div class="seg" id="deviceSeg">
+          <button data-kind="pc" class="on">💻 PC</button>
+          <button data-kind="phone">📱 Phone</button>
+        </div>
+      </div>
+      <div id="messages" class="messages"></div>
+      <div class="chips" id="chips"></div>
+      <form id="chatForm" class="chat-input">
+        <button type="button" id="micBtn" class="mic idle" title="Talk (Ctrl+M)">🎤</button>
+        <input id="chatText" autocomplete="off" placeholder="e.g. tell me on my phone when the download finishes">
+        <button type="submit">Send</button>
+      </form>
+      <div class="voice-bar">
+        <label class="small"><input type="checkbox" id="voiceMode"> Voice chat (keeps listening)</label>
+        <label class="small"><input type="checkbox" id="voiceMute"> Mute replies</label>
+        <span class="level"><i id="micLevel"></i></span>
+        <span id="voiceHint" class="muted small"></span>
+      </div>
+    </section>
+
+    <!-- graph -->
+    <section class="panel graph">
+      <div class="panel-head">
+        <h2>Memory graph</h2>
+        <div class="controls">
+          <select id="graphWindow">
+            <option value="60">last hour</option>
+            <option value="1440" selected>last 24 h</option>
+            <option value="10080">last 7 days</option>
+            <option value="43200">last 30 days</option>
+          </select>
+          <label class="small"><input type="checkbox" id="graphAuto" checked> live</label>
+          <button id="graphRefresh" class="ghost">↻</button>
+        </div>
+      </div>
+      <div class="graph-wrap">
+        <svg id="graphSvg"></svg>
+        <div id="legend" class="legend"></div>
+        <div id="nodeInfo" class="node-info hidden"></div>
+      </div>
+    </section>
+
+    <!-- side tabs -->
+    <section class="panel side">
+      <div class="tabs" id="tabs">
+        <button data-tab="timeline" class="on">Timeline</button>
+        <button data-tab="actions">Actions</button>
+        <button data-tab="tasks">Tasks</button>
+        <button data-tab="watchers">Watchers</button>
+        <button data-tab="memory">Memory</button>
+      </div>
+      <div class="tab-body">
+        <div id="tab-timeline" class="tab on"></div>
+        <div id="tab-actions" class="tab"></div>
+        <div id="tab-tasks" class="tab"></div>
+        <div id="tab-watchers" class="tab"></div>
+        <div id="tab-memory" class="tab"></div>
+      </div>
+      <div class="sim">
+        <span class="muted small">Simulator</span>
+        <button data-sim="morning">▶ Morning (email + Uber)</button>
+        <button data-sim="download">▶ Download</button>
+        <button data-sim="commute">▶ Commute</button>
+        <button data-sim="injection">▶ Injection email</button>
+        <button id="consolidate" class="ghost">Detect habits</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toasts" class="toasts"></div>
+  <div id="modal" class="modal hidden"><div class="modal-card"><button class="close" id="modalClose">×</button><div id="modalBody"></div></div></div>
+  <script src="/static/app.js"></script>
+  <script src="/static/voice.js"></script>
+</body>
+</html>

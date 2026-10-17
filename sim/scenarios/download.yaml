@@ -1,0 +1,18 @@
+# A download on the PC (use when no real PC agent is running).
+name: download
+steps:
+  - at: 0
+    device: pc-main
+    type: download.started
+    source: chrome
+    payload: {download_id: dl-sim-1, url: "http://localhost:8000/demo/Q3_report.pdf", filename: Q3_report.pdf}
+  - at: 6
+    device: pc-main
+    type: download.completed
+    source: chrome
+    payload:
+      download_id: dl-sim-1
+      url: "http://localhost:8000/demo/Q3_report.pdf"
+      filename: Q3_report.pdf
+      path: 'C:\Users\arjun\Downloads\Q3_report.pdf'
+      bytes: 482133

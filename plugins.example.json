@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "files": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Users/YOU/Documents"],
+      "env": {},
+      "mode": "confirm"
+    },
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "mode": "confirm"
+    }
+  }
+}

@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KAIROS Visual System Architecture Diagram • Live Flow Simulation</title>
+  <meta name="description" content="Interactive visual system diagram and live flow simulation of KAIROS: Multi-Device AI Agent, FalkorDB Cloud Knowledge Graph, Dual-Engine Planner, and Taint Defense.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #060913;
+      --panel: rgba(13, 20, 38, 0.75);
+      --panel-hover: rgba(23, 33, 62, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(56, 189, 248, 0.35);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --cyan: #38bdf8;
+      --cyan-glow: rgba(56, 189, 248, 0.35);
+      --purple: #c084fc;
+      --purple-glow: rgba(192, 132, 252, 0.35);
+      --emerald: #34d399;
+      --emerald-glow: rgba(52, 211, 153, 0.35);
+      --amber: #fbbf24;
+      --amber-glow: rgba(251, 191, 36, 0.35);
+      --rose: #fb7185;
+      --rose-glow: rgba(251, 113, 133, 0.35);
+      --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 90% 30%, rgba(192, 132, 252, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 50% 90%, rgba(52, 211, 153, 0.05) 0%, transparent 50%),
+        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+      user-select: none;
+    }
+
+    /* Header */
+    header {
+      padding: 18px 32px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(6, 9, 19, 0.85);
+      backdrop-filter: blur(16px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0284c7, #9333ea);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+      font-size: 20px;
+    }
+
+    .brand-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      backdrop-filter: blur(12px);
+      text-decoration: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn:hover {
+      background: var(--panel-hover);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      border-color: rgba(56, 189, 248, 0.4);
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
+    }
+
+    /* Simulation Control Bar */
+    .sim-bar {
+      padding: 12px 32px;
+      background: rgba(13, 20, 38, 0.6);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .sim-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sim-btn {
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+
+    .sim-btn:hover {
+      color: #fff;
+      border-color: var(--border-glow);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .sim-btn.active {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--cyan);
+      color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+    }
+
+    .sim-status {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* Diagram Canvas Container */
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 125px);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    svg#diagramSvg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Tooltip / Details Drawer */
+    .drawer {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      width: 360px;
+      background: rgba(13, 20, 38, 0.85);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      transform: translateY(120%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 40;
+    }
+
+    .drawer.open {
+      transform: translateY(0);
+    }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .drawer-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .drawer-close {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .drawer-body {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .drawer-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .drawer-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--cyan);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Diagram SVG Styles */
+    .cluster-box {
+      fill: rgba(15, 23, 42, 0.55);
+      stroke: rgba(255, 255, 255, 0.1);
+      stroke-width: 1.5;
+      rx: 16;
+      ry: 16;
+      transition: all 0.3s;
+    }
+
+    .cluster-box:hover {
+      stroke: rgba(255, 255, 255, 0.25);
+    }
+
+    .cluster-title {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      fill: var(--text-dim);
+    }
+
+    .node-group {
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .node-group:hover rect.node-rect {
+      stroke-width: 2;
+      filter: drop-shadow(0 0 10px var(--node-color, #38bdf8));
+    }
+
+    .node-rect {
+      fill: #0c1222;
+      stroke: rgba(255, 255, 255, 0.12);
+      stroke-width: 1.2;
+      rx: 12;
+      ry: 12;
+      transition: all 0.25s;
+    }
+
+    .node-icon-bg {
+      fill: rgba(255, 255, 255, 0.05);
+      rx: 8;
+      ry: 8;
+    }
+
+    .node-text-title {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 700;
+      fill: #f8fafc;
+    }
+
+    .node-text-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      fill: #94a3b8;
+    }
+
+    .link-path {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.12);
+      stroke-width: 1.5;
+      stroke-dasharray: 6 4;
+      transition: stroke 0.3s, stroke-width 0.3s;
+    }
+
+    .link-path.active-pulse {
+      stroke-dasharray: 8 4;
+      animation: dash 1s linear infinite;
+    }
+
+    @keyframes dash {
+      to { stroke-dashoffset: -24; }
+    }
+
+    /* Particle Animation */
+    .particle {
+      r: 4;
+      fill: #38bdf8;
+      filter: drop-shadow(0 0 6px #38bdf8);
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="logo-badge">📐</div>
+      <div>
+        <div class="brand-title">KAIROS System Architecture Diagram</div>
+        <div class="brand-subtitle">Interactive Vector Topology & Dataflow Map</div>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <a href="/architecture" class="btn">🏛 Architecture Overview</a>
+      <a href="/" class="btn btn-primary">← Dashboard</a>
+    </div>
+  </header>
+
+  <!-- Interactive Simulation Controls -->
+  <div class="sim-bar">
+    <div class="sim-label">⚡ Live Simulation Flow:</div>
+    <button class="sim-btn" onclick="startSim('voice')">1. Voice Query & Tool Loop</button>
+    <button class="sim-btn" onclick="startSim('injection')">2. Untrusted Ingestion & Taint Defense</button>
+    <button class="sim-btn" onclick="startSim('digest')">3. Nightly Memory Digest (3 AM)</button>
+    <button class="sim-btn" onclick="startSim('watcher')">4. Proactive Watcher Trigger</button>
+    <button class="sim-btn" onclick="resetSim()" style="margin-left:8px;">Reset</button>
+    <div id="simStatus" class="sim-status">Ready: Click any node to inspect or run a simulation.</div>
+  </div>
+
+  <!-- SVG Diagram Canvas -->
+  <div class="canvas-container">
+    <svg id="diagramSvg" viewBox="0 0 1600 950">
+      <defs>
+        <!-- Gradients -->
+        <linearGradient id="edgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#0284c7" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="#9333ea" stop-opacity="0.2"/>
+        </linearGradient>
+
+        <linearGradient id="pipeGradCyan" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#38bdf8"/>
+          <stop offset="100%" stop-color="#818cf8"/>
+        </linearGradient>
+
+        <linearGradient id="pipeGradPurple" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#c084fc"/>
+          <stop offset="100%" stop-color="#fb7185"/>
+        </linearGradient>
+
+        <filter id="glowCyan">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+
+        <!-- Marker Arrows -->
+        <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="rgba(255, 255, 255, 0.3)" />
+        </marker>
+        <marker id="arrowCyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#38bdf8" />
+        </marker>
+        <marker id="arrowPurple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#c084fc" />
+        </marker>
+        <marker id="arrowEmerald" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 8 5 L 0 9 z" fill="#34d399" />
+        </marker>
+      </defs>
+
+      <!-- ==================== CLUSTERS ==================== -->
+      
+      <!-- CLUSTER 1: EDGE LAYER -->
+      <rect class="cluster-box" x="40" y="40" width="360" height="860" />
+      <text class="cluster-title" x="65" y="75" fill="var(--cyan)">LAYER 1 • EDGE & MULTI-DEVICE MESH</text>
+
+      <!-- CLUSTER 2: INGESTION & TAINT -->
+      <rect class="cluster-box" x="440" y="40" width="340" height="860" />
+      <text class="cluster-title" x="465" y="75" fill="var(--purple)">LAYER 2 • INGESTION & TAINT GUARD</text>
+
+      <!-- CLUSTER 3: REASONING & BRAIN -->
+      <rect class="cluster-box" x="820" y="40" width="360" height="860" />
+      <text class="cluster-title" x="845" y="75" fill="var(--emerald)">LAYER 3 • DUAL-ENGINE BRAIN & POLICY</text>
+
+      <!-- CLUSTER 4: FALKORDB CLOUD & SYNTHESIS -->
+      <rect class="cluster-box" x="1220" y="40" width="340" height="860" />
+      <text class="cluster-title" x="1245" y="75" fill="var(--amber)">LAYER 4 & 5 • FALKORDB CLOUD & JOURNAL</text>
+
+
+      <!-- ==================== NODES ==================== -->
+
+      <!-- LAYER 1 NODES -->
+      <!-- PC Agent -->
+      <g id="node-pc" class="node-group" onclick="showNode('pc')" style="--node-color: var(--cyan);">
+        <rect class="node-rect" x="70" y="110" width="300" height="150" />
+        <rect class="node-icon-bg" x="88" y="128" width="44" height="44" />
+        <text x="100" y="156" font-size="22">💻</text>
+        <text class="node-text-title" x="145" y="146">Windows PC Agent</text>
+        <text class="node-text-sub" x="145" y="166">agents/pc_agent.py</text>
+        <text x="90" y="200" font-size="11" fill="#94a3b8">Downloads Watcher • Active App Poll</text>
+        <text x="90" y="218" font-size="11" fill="#94a3b8">PowerShell (Safe Filters) • Win11 Toasts</text>
+        <text x="90" y="236" font-size="11" fill="#64748b">Clipboard Forwarding • Browser History</text>
+      </g>
+
+      <!-- Phone Agent -->
+      <g id="node-phone" class="node-group" onclick="showNode('phone')" style="--node-color: var(--cyan);">
+        <rect class="node-rect" x="70" y="290" width="300" height="140" />
+        <rect class="node-icon-bg" x="88" y="308" width="44" height="44" />
+        <text x="100" y="336" font-size="22">📱</text>
+        <text class="node-text-title" x="145" y="326">Android Phone Agent</text>
+        <text class="node-text-sub" x="145" y="346">agents/phone_agent.py</text>
+        <text x="90" y="380" font-size="11" fill="#94a3b8">Android Notification Listener Stream</text>
+        <text x="90" y="398" font-size="11" fill="#94a3b8">GPS Geofences (Home/Office/Gym)</text>
+      </g>
+
+      <!-- Desktop Pet -->
+      <g id="node-pet" class="node-group" onclick="showNode('pet')" style="--node-color: var(--emerald);">
+        <rect class="node-rect" x="70" y="460" width="300" height="150" />
+        <rect class="node-icon-bg" x="88" y="478" width="44" height="44" />
+        <text x="100" y="506" font-size="22">🤖</text>
+        <text class="node-text-title" x="145" y="496">Desktop Animated Pet</text>
+        <text class="node-text-sub" x="145" y="516">kairos/pet/ (app.py, brain.py)</text>
+        <text x="90" y="550" font-size="11" fill="#94a3b8">Transparent CRT Pixel Art Overlay</text>
+        <text x="90" y="568" font-size="11" fill="#94a3b8">Eye Mouse-Tracking • 8 Mood States</text>
+        <text x="90" y="586" font-size="11" fill="#64748b">Click-to-Talk Mic VAD • System.Speech</text>
+      </g>
+
+      <!-- Web Dashboard -->
+      <g id="node-webui" class="node-group" onclick="showNode('webui')" style="--node-color: var(--amber);">
+        <rect class="node-rect" x="70" y="640" width="300" height="140" />
+        <rect class="node-icon-bg" x="88" y="658" width="44" height="44" />
+        <text x="100" y="686" font-size="22">🌐</text>
+        <text class="node-text-title" x="145" y="676">Web UI & Voice Chat</text>
+        <text class="node-text-sub" x="145" y="696">kairos/hub/static/ (voice.js)</text>
+        <text x="90" y="730" font-size="11" fill="#94a3b8">Cytoscape Graph • Memory Editor</text>
+        <text x="90" y="748" font-size="11" fill="#94a3b8">WebAudio Continuous Mic (Client VAD)</text>
+      </g>
+
+
+      <!-- LAYER 2 NODES -->
+      <!-- WebSocket Gateway -->
+      <g id="node-gateway" class="node-group" onclick="showNode('gateway')" style="--node-color: var(--purple);">
+        <rect class="node-rect" x="465" y="110" width="290" height="130" />
+        <rect class="node-icon-bg" x="483" y="128" width="44" height="44" />
+        <text x="495" y="156" font-size="22">🔌</text>
+        <text class="node-text-title" x="540" y="146">WebSocket Gateway</text>
+        <text class="node-text-sub" x="540" y="166">kairos/gateway.py</text>
+        <text x="485" y="200" font-size="11" fill="#94a3b8">FastAPI WS Router • Device Tokens</text>
+        <text x="485" y="218" font-size="11" fill="#94a3b8">Outbound Dispatcher • Heartbeats</text>
+      </g>
+
+      <!-- Taint Guard -->
+      <g id="node-taint" class="node-group" onclick="showNode('taint')" style="--node-color: var(--rose);">
+        <rect class="node-rect" x="465" y="270" width="290" height="140" />
+        <rect class="node-icon-bg" x="483" y="288" width="44" height="44" />
+        <text x="495" y="316" font-size="22">🛡️</text>
+        <text class="node-text-title" x="540" y="306">Taint & Trust Guard</text>
+        <text class="node-text-sub" x="540" y="326">kairos/trust.py</text>
+        <text x="485" y="360" font-size="11" fill="#fb7185">Origin-Derived Trust (User/Device/Ext)</text>
+        <text x="485" y="378" font-size="11" fill="#94a3b8">Sanitizes External Text with &lt;untrusted&gt;</text>
+        <text x="485" y="396" font-size="11" fill="#64748b">Prevents Indirect Prompt Injection</text>
+      </g>
+
+      <!-- Triage & Commitments -->
+      <g id="node-triage" class="node-group" onclick="showNode('triage')" style="--node-color: var(--purple);">
+        <rect class="node-rect" x="465" y="440" width="290" height="140" />
+        <rect class="node-icon-bg" x="483" y="458" width="44" height="44" />
+        <text x="495" y="486" font-size="22">🔍</text>
+        <text class="node-text-title" x="540" y="476">Stream Triage & Tasks</text>
+        <text class="node-text-sub" x="540" y="496">kairos/triage.py, tasks.py</text>
+        <text x="485" y="530" font-size="11" fill="#94a3b8">Entity Extraction • Commitment Detection</text>
+        <text x="485" y="548" font-size="11" fill="#94a3b8">Geofence Transitions • Deduplication</text>
+      </g>
+
+      <!-- Proactive Watchers -->
+      <g id="node-watchers" class="node-group" onclick="showNode('watchers')" style="--node-color: var(--purple);">
+        <rect class="node-rect" x="465" y="610" width="290" height="130" />
+        <rect class="node-icon-bg" x="483" y="628" width="44" height="44" />
+        <text x="495" y="656" font-size="22">👁️</text>
+        <text class="node-text-title" x="540" y="646">Proactive Watchers</text>
+        <text class="node-text-sub" x="540" y="666">kairos/watchers.py</text>
+        <text x="485" y="700" font-size="11" fill="#94a3b8">Persistent Cypher Rule Triggers</text>
+        <text x="485" y="718" font-size="11" fill="#94a3b8">Auto-Alerts upon Event Match</text>
+      </g>
+
+
+      <!-- LAYER 3 NODES -->
+      <!-- Dual-Engine Agent -->
+      <g id="node-agent" class="node-group" onclick="showNode('agent')" style="--node-color: var(--emerald);">
+        <rect class="node-rect" x="845" y="110" width="310" height="160" />
+        <rect class="node-icon-bg" x="863" y="128" width="44" height="44" />
+        <text x="875" y="156" font-size="22">🧠</text>
+        <text class="node-text-title" x="920" y="146">Dual-Engine Planner</text>
+        <text class="node-text-sub" x="920" y="166">kairos/agent/core.py</text>
+        <text x="865" y="200" font-size="11" fill="#34d399">Cloud LLM: OpenRouter mimo-v2.6-pro</text>
+        <text x="865" y="218" font-size="11" fill="#94a3b8">Offline Fallback: Intent Rules Engine</text>
+        <text x="865" y="236" font-size="11" fill="#94a3b8">GraphRAG Context Card Injection</text>
+        <text x="865" y="254" font-size="11" fill="#64748b">Multi-line Shell Result Followup Loop</text>
+      </g>
+
+      <!-- Policy Guard -->
+      <g id="node-policy" class="node-group" onclick="showNode('policy')" style="--node-color: var(--rose);">
+        <rect class="node-rect" x="845" y="300" width="310" height="150" />
+        <rect class="node-icon-bg" x="863" y="318" width="44" height="44" />
+        <text x="875" y="346" font-size="22">⚖️</text>
+        <text class="node-text-title" x="920" y="336">Policy & Permission Matrix</text>
+        <text class="node-text-sub" x="920" y="356">kairos/policy.py</text>
+        <text x="865" y="390" font-size="11" fill="#fb7185">Auto vs Confirm vs Deny Policy</text>
+        <text x="865" y="408" font-size="11" fill="#94a3b8">Tainted Turn Auto-Upgrade to Confirm</text>
+        <text x="865" y="426" font-size="11" fill="#34d399">"Yes, Always" Persistent Capability Trust</text>
+      </g>
+
+      <!-- 44 Tools -->
+      <g id="node-tools" class="node-group" onclick="showNode('tools')" style="--node-color: var(--emerald);">
+        <rect class="node-rect" x="845" y="480" width="310" height="150" />
+        <rect class="node-icon-bg" x="863" y="498" width="44" height="44" />
+        <text x="875" y="526" font-size="22">🛠️</text>
+        <text class="node-text-title" x="920" y="516">Toolbox (44 Tools)</text>
+        <text class="node-text-sub" x="920" y="536">kairos/agent/tools.py</text>
+        <text x="865" y="570" font-size="11" fill="#94a3b8">Shell, Files, Clipboard, Sandbox</text>
+        <text x="865" y="588" font-size="11" fill="#94a3b8">Hybrid Memory Recall, Notes, Facts</text>
+        <text x="865" y="606" font-size="11" fill="#64748b">Web Search & Read, Digest, Tasks</text>
+      </g>
+
+      <!-- Runtime Coordinator -->
+      <g id="node-runtime" class="node-group" onclick="showNode('runtime')" style="--node-color: var(--emerald);">
+        <rect class="node-rect" x="845" y="660" width="310" height="130" />
+        <rect class="node-icon-bg" x="863" y="678" width="44" height="44" />
+        <text x="875" y="706" font-size="22">⚙️</text>
+        <text class="node-text-title" x="920" y="696">Kairos Runtime</text>
+        <text class="node-text-sub" x="920" y="716">kairos/runtime.py</text>
+        <text x="865" y="748" font-size="11" fill="#94a3b8">RLock Concurrency • Device Routing</text>
+        <text x="865" y="766" font-size="11" fill="#94a3b8">60s Background Jobs (Email, ICS, Digest)</text>
+      </g>
+
+
+      <!-- LAYER 4 & 5 NODES -->
+      <!-- FalkorDB Cloud Instance -->
+      <g id="node-falkordb" class="node-group" onclick="showNode('falkordb')" style="--node-color: var(--amber);">
+        <rect class="node-rect" x="1245" y="110" width="290" height="170" />
+        <rect class="node-icon-bg" x="1263" y="128" width="44" height="44" />
+        <text x="1275" y="156" font-size="22">☁️</text>
+        <text class="node-text-title" x="1320" y="146">FalkorDB Cloud Memory</text>
+        <text class="node-text-sub" x="1320" y="166">Port 53189 (No Docker)</text>
+        <text x="1265" y="200" font-size="11" fill="#fbbf24">Graph: kairos:arjun</text>
+        <text x="1265" y="218" font-size="11" fill="#94a3b8">Native Redis Protocol (FALKORDB_SSL=0)</text>
+        <text x="1265" y="236" font-size="11" fill="#94a3b8">Vector & Fulltext Node Indices</text>
+        <text x="1265" y="254" font-size="11" fill="#64748b">Bi-temporal Validated Facts</text>
+      </g>
+
+      <!-- 130 Cypher Queries -->
+      <g id="node-queries" class="node-group" onclick="showNode('queries')" style="--node-color: var(--amber);">
+        <rect class="node-rect" x="1245" y="310" width="290" height="140" />
+        <rect class="node-icon-bg" x="1263" y="328" width="44" height="44" />
+        <text x="1275" y="356" font-size="22">📜</text>
+        <text class="node-text-title" x="1320" y="346">130 Cypher Queries</text>
+        <text class="node-text-sub" x="1320" y="366">queries/*.cypher (18 files)</text>
+        <text x="1265" y="400" font-size="11" fill="#94a3b8">Zero Inline Cypher Strings</text>
+        <text x="1265" y="418" font-size="11" fill="#94a3b8">Allowlisted Rel & Label Templates</text>
+        <text x="1265" y="436" font-size="11" fill="#34d399">100% Doctor Planned & Verified</text>
+      </g>
+
+      <!-- Chat Journal -->
+      <g id="node-journal" class="node-group" onclick="showNode('journal')" style="--node-color: var(--rose);">
+        <rect class="node-rect" x="1245" y="480" width="290" height="140" />
+        <rect class="node-icon-bg" x="1263" y="498" width="44" height="44" />
+        <text x="1275" y="526" font-size="22">📓</text>
+        <text class="node-text-title" x="1320" y="516">Disk Chat Journal</text>
+        <text class="node-text-sub" x="1320" y="536">kairos/journal.py</text>
+        <text x="1265" y="570" font-size="11" fill="#94a3b8">Append-Only Plaintext Daily Logs</text>
+        <text x="1265" y="588" font-size="11" fill="#94a3b8">Auto Session Restore across Restarts</text>
+        <text x="1265" y="606" font-size="11" fill="#64748b">~/.kairos/chatlog/YYYY-MM-DD.txt</text>
+      </g>
+
+      <!-- Nightly Digest -->
+      <g id="node-digest" class="node-group" onclick="showNode('digest')" style="--node-color: var(--amber);">
+        <rect class="node-rect" x="1245" y="650" width="290" height="140" />
+        <rect class="node-icon-bg" x="1263" y="668" width="44" height="44" />
+        <text x="1275" y="696" font-size="22">✨</text>
+        <text class="node-text-title" x="1320" y="686">Nightly Memory Digest</text>
+        <text class="node-text-sub" x="1320" y="706">kairos/digest.py</text>
+        <text x="1265" y="740" font-size="11" fill="#94a3b8">3 AM Incremental Worker</text>
+        <text x="1265" y="758" font-size="11" fill="#94a3b8">Turns Chat into Facts/Notes/Tasks</text>
+        <text x="1265" y="776" font-size="11" fill="#fbbf24">DERIVED_FROM Edges with Provenance</text>
+      </g>
+
+
+      <!-- ==================== FLOW CONNECTOR PATHS ==================== -->
+      <!-- PC to Gateway -->
+      <path id="link-pc-gateway" class="link-path" d="M 370 170 L 465 170" marker-end="url(#arrow)" />
+      <!-- Phone to Gateway -->
+      <path id="link-phone-gateway" class="link-path" d="M 370 340 L 410 340 L 410 190 L 465 190" marker-end="url(#arrow)" />
+      <!-- Pet to Gateway -->
+      <path id="link-pet-gateway" class="link-path" d="M 370 520 L 420 520 L 420 210 L 465 210" marker-end="url(#arrow)" />
+      <!-- WebUI to Gateway -->
+      <path id="link-webui-gateway" class="link-path" d="M 370 700 L 430 700 L 430 230 L 465 230" marker-end="url(#arrow)" />
+
+      <!-- Gateway to Taint Guard -->
+      <path id="link-gw-taint" class="link-path" d="M 610 240 L 610 270" marker-end="url(#arrow)" />
+      <!-- Gateway to Triage -->
+      <path id="link-gw-triage" class="link-path" d="M 610 240 L 610 440" marker-end="url(#arrow)" />
+      <!-- Gateway to Watchers -->
+      <path id="link-gw-watchers" class="link-path" d="M 610 240 L 610 610" marker-end="url(#arrow)" />
+
+      <!-- Ingestion to Agent -->
+      <path id="link-taint-agent" class="link-path" d="M 755 330 L 800 330 L 800 170 L 845 170" marker-end="url(#arrowCyan)" />
+      <path id="link-gw-agent" class="link-path" d="M 755 170 L 845 170" marker-end="url(#arrowCyan)" />
+
+      <!-- Agent to Policy -->
+      <path id="link-agent-policy" class="link-path" d="M 1000 270 L 1000 300" marker-end="url(#arrow)" />
+      <!-- Policy to Tools -->
+      <path id="link-policy-tools" class="link-path" d="M 1000 450 L 1000 480" marker-end="url(#arrowEmerald)" />
+      <!-- Tools to Devices (Feedback) -->
+      <path id="link-tools-exec" class="link-path" d="M 845 540 L 400 540 L 400 180 L 370 180" marker-end="url(#arrow)" />
+
+      <!-- Agent/Runtime to FalkorDB -->
+      <path id="link-agent-falkordb" class="link-path" d="M 1155 170 L 1245 170" marker-end="url(#arrow)" />
+      <!-- Queries to FalkorDB -->
+      <path id="link-queries-falkordb" class="link-path" d="M 1390 310 L 1390 280" marker-end="url(#arrow)" />
+
+      <!-- Agent to Journal -->
+      <path id="link-agent-journal" class="link-path" d="M 1155 240 L 1200 240 L 1200 540 L 1245 540" marker-end="url(#arrow)" />
+      <!-- Journal to Digest -->
+      <path id="link-journal-digest" class="link-path" d="M 1390 620 L 1390 650" marker-end="url(#arrow)" />
+      <!-- Digest to FalkorDB -->
+      <path id="link-digest-falkordb" class="link-path" d="M 1535 710 L 1570 710 L 1570 180 L 1535 180" marker-end="url(#arrow)" />
+
+      <!-- Floating Animated Particle -->
+      <circle id="animParticle" class="particle" cx="0" cy="0" />
+    </svg>
+  </div>
+
+  <!-- Interactive Inspector Drawer -->
+  <div id="drawer" class="drawer">
+    <div class="drawer-header">
+      <div id="drawerTitle" class="drawer-title">Node Title</div>
+      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+    <div id="drawerBody" class="drawer-body">Node details go here.</div>
+    <div id="drawerTags" class="drawer-tags"></div>
+  </div>
+
+  <script>
+    const NODE_DATA = {
+      pc: {
+        title: '💻 Windows PC Agent (agents/pc_agent.py)',
+        desc: 'Edge daemon connecting to WebSocket ws://localhost:8000/ws/pc-main. Continuously tracks active foreground window, monitors ~/Downloads for file creations, executes piped PowerShell commands guarded by SAFE_FILTERS, updates system clipboard, and triggers Windows 11 toast alerts.',
+        tags: ['watchdog', 'powershell', 'win11toast', 'pyttsx3', 'clipboard']
+      },
+      phone: {
+        title: '📱 Android Phone Agent (agents/phone_agent.py)',
+        desc: 'Captures Android system notifications from WhatsApp, Slack, Gmail, and banking SMS. Streams live GPS latitude/longitude updates for geofences and pushes native mobile alerts.',
+        tags: ['Termux', 'notifications', 'geofence', 'mobile-telemetry']
+      },
+      pet: {
+        title: '🤖 Desktop CRT Animated Pet (kairos/pet/)',
+        desc: 'Lightweight procedural pixel-art robot companion sitting on top of the Windows taskbar. Features real-time eye mouse-tracking, 8 dynamic mood animations, live speech bubbles from hub outbox, and click-to-talk mic input.',
+        tags: ['tkinter', 'procedural-art', 'mouse-tracking', 'sounddevice', 'system.speech']
+      },
+      webui: {
+        title: '🌐 Web UI & Continuous Voice (kairos/hub/static/)',
+        desc: 'Web dashboard hosting interactive Cytoscape.js knowledge graph view, live audit logs, memory editor, and continuous hands-free voice conversation with WebAudio VAD and browser speech synthesis.',
+        tags: ['cytoscape.js', 'webaudio', 'vad', 'speechSynthesis']
+      },
+      gateway: {
+        title: '🔌 WebSocket Gateway (kairos/gateway.py)',
+        desc: 'FastAPI WebSocket router managing persistent two-way tunnels to PC, Phone, and Pet clients. Handles authorization tokens, heartbeat pings, and serializes Outbound actions.',
+        tags: ['websockets', 'fastapi', 'heartbeats', 'channel-router']
+      },
+      taint: {
+        title: '🛡️ Taint & Trust Boundary (kairos/trust.py)',
+        desc: 'Zero-trust prompt injection firewall. Tags incoming events as user, device, or external. If external text (email, web, notification) enters the LLM turn, the turn is tainted, automatically upgrading sensitive capabilities from auto to confirm.',
+        tags: ['prompt-injection-defense', 'taint-tracking', 'untrusted-sanitization']
+      },
+      triage: {
+        title: '🔍 Stream Triage & Task Extractor (kairos/triage.py)',
+        desc: 'Entity and intent stream extractor. Detects commitments ("I promised Rahul to send deck by Friday" -> Task), classifies notification categories, and detects geofence entries.',
+        tags: ['commitments', 'task-extraction', 'geofences', 'deduplication']
+      },
+      watchers: {
+        title: '👁️ Proactive Watchers (kairos/watchers.py)',
+        desc: 'Persistent conditional triggers evaluated in FalkorDB. Evaluates rules on incoming events (e.g. "tell me when download finishes") and pushes proactive alerts.',
+        tags: ['reactive-triggers', 'cypher-matching', 'proactive-push']
+      },
+      agent: {
+        title: '🧠 Dual-Engine Agent (kairos/agent/core.py)',
+        desc: 'Stateful coordinator. Uses OpenRouter cloud model (xiaomi/mimo-v2.6-pro) for dynamic tool loops, seamlessly falling back to 100% offline rule-based regex planner when offline. Followup loop feeds multi-line shell output back into model.',
+        tags: ['openrouter', 'mimo-v2.6-pro', 'graphrag-cards', 'offline-fallback']
+      },
+      policy: {
+        title: '⚖️ Policy & Permission Matrix (kairos/policy.py)',
+        desc: 'Validates capabilities using FalkorDB ALLOWED edges. Auto vs Confirm vs Deny. Upgrades tainted turns to Confirm. "Yes, always" user approval persistently trusts capabilities via Cypher.',
+        tags: ['least-privilege', 'persistent-trust', 'safe-filters', 'audit-ledger']
+      },
+      tools: {
+        title: '🛠️ Toolbox (44 Tools) (kairos/agent/tools.py)',
+        desc: '44 capabilities across device execution, filesystem, PowerShell, hybrid vector+fulltext recall, web search, task management, calendar prep, and family sharing.',
+        tags: ['run_command', 'search_memory', 'web_search', 'recall_conversation']
+      },
+      runtime: {
+        title: '⚙️ Kairos Runtime (kairos/runtime.py)',
+        desc: 'Core daemon threading controller. Keeps graph writes atomic under an RLock while running network I/O unlocked. 60s background jobs poll email, ICS calendar, and memory digest.',
+        tags: ['threading-rlock', 'background-jobs', 'device-router']
+      },
+      falkordb: {
+        title: '☁️ FalkorDB Cloud Instance',
+        desc: 'High-speed Redis-native graph database on AWS (port 53189, FALKORDB_SSL=0). Stores graph kairos:arjun containing User, Device, Capability, Action, Event, Fact, Person, Place, Task, and Digest.',
+        tags: ['falkordb-cloud', 'redis-protocol', 'vector-index', 'fulltext-index']
+      },
+      queries: {
+        title: '📜 130 Named Cypher Queries (queries/*.cypher)',
+        desc: 'Strict database abstraction layer with zero inline Cypher strings. 130 queries across 18 files. Verified by kairos doctor using GRAPH.EXPLAIN on FalkorDB Cloud.',
+        tags: ['zero-inline-cypher', 'strict-parameters', 'doctor-verified']
+      },
+      journal: {
+        title: '📓 Disk Chat Journal (kairos/journal.py)',
+        desc: 'Daily append-only chat ledger at ~/.kairos/chatlog/YYYY-MM-DD.txt. Automatically restores conversational session context on hub restart so multi-turn chats never vanish.',
+        tags: ['disk-persistence', 'session-restore', '30-day-pruning']
+      },
+      digest: {
+        title: '✨ Nightly Memory Digest (kairos/digest.py)',
+        desc: 'Runs at 3 AM or on demand via kairos digest. Reads recent chat turns and synthesizes long-term facts, notes, and tasks into FalkorDB linked with DERIVED_FROM provenance.',
+        tags: ['incremental-synthesis', 'derived-from-provenance', '3am-worker']
+      }
+    };
+
+    function showNode(key) {
+      const data = NODE_DATA[key];
+      if (!data) return;
+      document.getElementById('drawerTitle').textContent = data.title;
+      document.getElementById('drawerBody').textContent = data.desc;
+      const tagsEl = document.getElementById('drawerTags');
+      tagsEl.innerHTML = data.tags.map(t => `<span class="drawer-tag">${t}</span>`).join('');
+      document.getElementById('drawer').classList.add('open');
+      document.getElementById('simStatus').textContent = `Inspecting: ${data.title.split(' ')[1] || key}`;
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer').classList.remove('open');
+    }
+
+    // Live Flow Animations
+    let simInterval = null;
+
+    function resetSim() {
+      if (simInterval) clearInterval(simInterval);
+      document.querySelectorAll('.sim-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.link-path').forEach(p => {
+        p.classList.remove('active-pulse');
+        p.style.stroke = 'rgba(255, 255, 255, 0.12)';
+        p.style.strokeWidth = '1.5';
+      });
+      document.getElementById('animParticle').style.opacity = '0';
+      document.getElementById('simStatus').textContent = 'Ready: Click any node to inspect or run a simulation.';
+    }
+
+    function startSim(type) {
+      resetSim();
+      event.target.classList.add('active');
+
+      let sequence = [];
+      let statusText = '';
+
+      if (type === 'voice') {
+        sequence = ['link-pet-gateway', 'link-gw-agent', 'link-agent-falkordb', 'link-agent-policy', 'link-policy-tools', 'link-tools-exec'];
+        statusText = 'Simulating Voice Query: Mic -> Gateway -> LLM Brain -> FalkorDB GraphRAG -> Policy -> Tool Execution';
+      } else if (type === 'injection') {
+        sequence = ['link-phone-gateway', 'link-gw-taint', 'link-taint-agent', 'link-agent-policy'];
+        statusText = 'Simulating Prompt Injection Defense: Untrusted Email -> Taint Guard -> Tainted Turn -> Policy Upgrades to Confirm';
+      } else if (type === 'digest') {
+        sequence = ['link-agent-journal', 'link-journal-digest', 'link-digest-falkordb'];
+        statusText = 'Simulating Nightly Digest: Chat Turns -> Disk Journal -> 3 AM Digest Synthesis -> FalkorDB Long-Term Nodes';
+      } else if (type === 'watcher') {
+        sequence = ['link-pc-gateway', 'link-gw-watchers', 'link-tools-exec'];
+        statusText = 'Simulating Proactive Watcher: Download Finished Event -> Watcher Evaluated in Cypher -> Push Alert Dispatched';
+      }
+
+      document.getElementById('simStatus').textContent = statusText;
+
+      let idx = 0;
+      simInterval = setInterval(() => {
+        if (idx > 0) {
+          const prevPath = document.getElementById(sequence[idx - 1]);
+          if (prevPath) {
+            prevPath.style.stroke = 'rgba(56, 189, 248, 0.4)';
+          }
+        }
+        if (idx >= sequence.length) {
+          idx = 0;
+          document.querySelectorAll('.link-path').forEach(p => {
+            p.classList.remove('active-pulse');
+            p.style.stroke = 'rgba(255, 255, 255, 0.12)';
+          });
+        }
+        const path = document.getElementById(sequence[idx]);
+        if (path) {
+          path.classList.add('active-pulse');
+          path.style.stroke = '#38bdf8';
+          path.style.strokeWidth = '2.5';
+        }
+        idx++;
+      }, 700);
+    }
+  </script>
+</body>
+</html>

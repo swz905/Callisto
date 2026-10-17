@@ -1,0 +1,82 @@
+# Demo morning: Rahul emails a report link, an Uber counts down, Priya pings on WhatsApp.
+# `at` = seconds after replay starts (scaled by --speed).
+name: morning
+steps:
+  # live status snapshots (normally sent by the device agents every 2 min)
+  - at: 0
+    device: pc-main
+    type: device.status
+    source: status
+    payload: {foreground_app: Outlook, foreground_title: "Inbox - Arjun Mehta", apps: [Outlook, Chrome, Teams, VS Code],
+              battery: 64, charging: false, network: "Wi-Fi Home-5G", mem: 58, idle_s: 5}
+  - at: 0
+    device: phone-arjun
+    type: device.status
+    source: status
+    payload: {foreground_app: com.ubercab, battery: 23, charging: false, network: "Wi-Fi Home-5G"}
+  - at: 0
+    device: phone-arjun
+    type: notification
+    source: com.google.android.gm
+    payload:
+      app: Gmail
+      title: Rahul Sharma
+      subject: Q3 report for review
+      body: "Q3 report for review. Please go through before the 11am sync: http://localhost:8000/demo/Q3_report.pdf"
+  # a request -> becomes an open commitment ("Rahul asked you to share the updated budget deck by Friday")
+  - at: 2
+    device: phone-arjun
+    type: notification
+    source: com.google.android.gm
+    payload:
+      app: Gmail
+      title: Rahul Sharma
+      subject: Budget deck
+      body: "Could you share the updated budget deck by Friday? Thanks"
+  - at: 4
+    device: phone-arjun
+    type: notification
+    source: com.ubercab
+    payload: {app: Uber, title: Uber, body: "Ramesh is 6 min away in a white Dzire", trip_id: trip-demo-1, destination: Office}
+  - at: 8
+    device: phone-arjun
+    type: notification
+    source: com.ubercab
+    payload: {app: Uber, title: Uber, body: "Ramesh is 4 min away", trip_id: trip-demo-1, destination: Office}
+  - at: 12
+    device: phone-arjun
+    type: notification
+    source: com.whatsapp
+    payload: {app: WhatsApp, title: Priya Mehta, body: "Did you see the photos? https://photos.example.com/goa-trip"}
+  # triage demo: a promo (noise), then Rahul's reply that fulfils "tell me when Rahul replies about the budget"
+  - at: 13
+    device: phone-arjun
+    type: notification
+    source: com.amazon.mShop.android.shopping
+    payload: {app: Amazon, title: "Big Billion Sale", body: "Up to 70% off on headphones. Limited time offer!"}
+  - at: 15
+    device: phone-arjun
+    type: notification
+    source: com.slack
+    payload: {app: Slack, title: Rahul Sharma, body: "Budget numbers are final, need your sign-off ASAP before the 11am sync"}
+  - at: 16
+    device: phone-arjun
+    type: notification
+    source: com.ubercab
+    payload: {app: Uber, title: Uber, body: "Ramesh is 2 min away", trip_id: trip-demo-1, destination: Office}
+  - at: 18
+    device: pc-main
+    type: device.status
+    source: status
+    payload: {foreground_app: Chrome, foreground_title: "Q3_report.pdf", apps: [Outlook, Chrome, Teams, VS Code, Acrobat],
+              battery: 63, charging: false, network: "Wi-Fi Home-5G", mem: 61, idle_s: 2}
+  - at: 20
+    device: phone-arjun
+    type: device.status
+    source: status
+    payload: {foreground_app: com.ubercab, battery: 18, charging: false, network: "mobile data/offline"}
+  - at: 22
+    device: phone-arjun
+    type: notification
+    source: com.ubercab
+    payload: {app: Uber, title: Uber, body: "Ramesh has arrived at your pickup", trip_id: trip-demo-1, destination: Office}

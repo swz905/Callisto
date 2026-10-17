@@ -1,0 +1,19 @@
+# Location demo: the phone is at the Office, then heads Home.
+# First say: "remind me to buy milk when I leave the office", then play this scenario.
+name: commute
+steps:
+  - at: 0
+    device: phone-arjun
+    type: device.status
+    source: status
+    payload: {battery: 54, charging: false, network: "Wi-Fi Office", location: {lat: 28.4596, lon: 77.0951}}
+  - at: 6
+    device: phone-arjun
+    type: device.status
+    source: status
+    payload: {battery: 52, charging: false, network: "mobile data/offline", location: {lat: 28.4402, lon: 77.0811}}
+  - at: 14
+    device: phone-arjun
+    type: device.status
+    source: status
+    payload: {battery: 50, charging: false, network: "Wi-Fi Home-5G", location: {lat: 28.4212, lon: 77.0716}}
