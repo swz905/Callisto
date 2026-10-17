@@ -119,6 +119,10 @@ scripts\launch_phone_adb.bat
 
 **Option B (From terminal):**
 ```powershell
+# Connect to your cloud-deployed hub (works anywhere over internet):
+python -m agents.phone_agent --hub ws://129.151.21.192 --device phone-arjun --adb --chat
+
+# Or connect to a local hub:
 python -m agents.phone_agent --hub ws://localhost:8000 --device phone-arjun --adb --chat
 ```
 
@@ -126,7 +130,7 @@ python -m agents.phone_agent --hub ws://localhost:8000 --device phone-arjun --ad
 
 ## Method 2: On-Device Daemon via Termux
 
-This method runs directly on your phone, independent of your PC.
+This method runs directly on your phone, independent of your PC. Because the KAIROS Hub is hosted on the cloud, your phone can connect from **any network** (cellular 5G/4G or Wi-Fi).
 
 ### Step 1: Install Termux & Termux:API
 1. Install **Termux** from [F-Droid](https://f-droid.org/packages/com.termux/) or GitHub (do not use Google Play Store version as it is outdated).
@@ -147,9 +151,12 @@ pip install websockets
 ### Step 3: Run the Agent
 Copy `agents/phone_agent.py` and `agents/common.py` to a directory on your phone:
 ```bash
+# Connect directly to the cloud hub (no local Wi-Fi pairing needed):
+python phone_agent.py --hub ws://129.151.21.192 --device phone-arjun --chat --location
+
+# Or to a local hub on your LAN:
 python phone_agent.py --hub ws://<YOUR_PC_IP>:8000 --device phone-arjun --chat --location
 ```
-*(Replace `<YOUR_PC_IP>` with your PC's local Wi-Fi IP address, e.g. `192.168.1.100`)*
 
 ---
 
