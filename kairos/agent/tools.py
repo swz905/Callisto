@@ -187,7 +187,8 @@ TOOL_SPECS: dict[str, tuple[str, str, dict]] = {
     "find_path": ("read", "How two people/places/files/apps are connected in memory.",
                   _obj(["a", "b"], a=_s("First name/thing"), b=_s("Second name/thing"))),
     "list_watchers": ("read", "What KAIROS is currently watching for.", _obj()),
-    "cancel_watchers": ("watcher.create", "Cancel all active watchers/reminders.", _obj()),
+    "cancel_watchers": ("watcher.create", "Cancel active watchers/reminders. Optionally filter by topic/description keyword (e.g. 'kettle', 'oven'). If omitted or 'all', cancels all.",
+                        _obj(query=_s("Optional keyword to cancel only matching reminders, e.g. 'kettle'"))),
     "help": ("read", "What KAIROS can do.", _obj()),
 }
 ACTION_TOOLS = [n for n, (cap, _, _) in TOOL_SPECS.items() if cap != "read"] + ["notify"]
@@ -211,8 +212,8 @@ def capability_for(name: str, args: dict) -> str:
     return TOOL_SPECS[name][0]
 
 
-# Tools that do slow network I/O: run outside the graph lock (they take it themselves for their writes).
-UNLOCKED_TOOLS = {"web_search", "read_page", "digest_memory"}
+# Tools that do slow network/device I/O: run outside the graph lock (they take it themselves for their writes).
+UNLOCKED_TOOLS = {"web_search", "read_page", "digest_memory", "read_notifications", "take_screenshot", "run_command", "send_ui_message"}
 
 
 def summarize(name: str, args: dict, device_name: str) -> str:
@@ -350,7 +351,18 @@ class Toolbox:
             return ToolResult("I'm not watching for anything right now.")
         return ToolResult("I'm watching for: " + "; ".join(r["description"] for r in rows) + ".", {"watchers": rows})
 
-    def t_cancel_watchers(self, turn: Turn) -> ToolResult:
+    def t_cancel_watchers(self, turn: Turn, query: str | None = None) -> ToolResult:
+        if query and query.strip().lower() not in ("all", "*", "everything"):
+            q = query.strip().lower()
+            active = self.k.watchers.list_active()
+            matching = [w for w in active if q in (w.get("description") or "").lower() or q in (w.get("message") or "").lower()]
+            if not matching:
+                return ToolResult(f"No active reminders matched '{query}'.")
+            cancelled = 0
+            for w in matching:
+                if self.k.watchers.cancel(w["id"]):
+                    cancelled += 1
+            return ToolResult(f"Cancelled {cancelled} reminder{'s' if cancelled != 1 else ''} matching '{query}'.")
         n = self.k.watchers.cancel()
         return ToolResult(f"Cancelled {n} reminder{'s' if n != 1 else ''}.")
 
@@ -602,8 +614,15 @@ class Toolbox:
 
     def t_run_command(self, turn: Turn, cmd: str, device: str | None = None) -> ToolResult:
         target = self._dev(device, turn)
+        if turn.action_id and hasattr(self.k, "register_action_waiter"):
+            self.k.register_action_waiter(turn.action_id)
         self.k.gateway.send(Outbound(kind="exec", device_id=target, text=f"Running {cmd}", args={"cmd": cmd},
                                      action_id=turn.action_id))
+        if turn.action_id and hasattr(self.k, "wait_for_device_result"):
+            res = self.k.wait_for_device_result(turn.action_id, timeout=4.5)
+            if res:
+                ok, output = res
+                return ToolResult(output, {"cmd": cmd, "output": output, "ok": ok})
         return ToolResult(f"Running `{cmd}` on {self._dev_name(target)}. I'll tell you the result.",
                           {"cmd": cmd, "dispatched": True})
 
@@ -792,6 +811,8 @@ class Toolbox:
                            press_enter: bool = True, device: str | None = None) -> ToolResult:
         target = self._dev(device, turn)
         who = f" to {recipient}" if recipient else ""
+        if turn.action_id and hasattr(self.k, "register_action_waiter"):
+            self.k.register_action_waiter(turn.action_id)
         self.k.gateway.send(Outbound(
             kind="type_message",
             device_id=target,
@@ -799,6 +820,12 @@ class Toolbox:
             args={"text": message, "recipient": recipient, "app": app, "press_enter": bool(press_enter)},
             action_id=turn.action_id
         ))
+        if turn.action_id and hasattr(self.k, "wait_for_device_result"):
+            res = self.k.wait_for_device_result(turn.action_id, timeout=7.0)
+            if res:
+                ok, output = res
+                return ToolResult(output, {"text": message, "recipient": recipient, "app": app,
+                                           "press_enter": press_enter, "output": output, "ok": ok})
         dest = f"{app} on {self._dev_name(target)}" if app else self._dev_name(target)
         action_verb = "Sent message" if press_enter else "Typed draft"
         return ToolResult(f"{action_verb}{who} in {dest}.",

@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
+from kairos.diag import diag_log
 from kairos.ingest import rules
 
 if TYPE_CHECKING:
@@ -135,11 +136,16 @@ class OpenRouterPlanner:
         messages += ctx.session.get("history", [])[-8:]
         messages.append({"role": "user", "content": utterance})
         last_results: list[str] = []
-        for _ in range(MAX_STEPS):
+        for step in range(MAX_STEPS):
+            diag_log("LLM_STEP", f"Querying model '{self.client.model}' (step {step + 1}/{MAX_STEPS})",
+                     model=self.client.model, step=step + 1, message_count=len(messages))
             msg = self.client.chat(messages, tools=self.tools)
             calls = msg.get("tool_calls") or []
             if not calls:
-                return (msg.get("content") or "").strip() or " ".join(last_results) or "Done."
+                final_text = (msg.get("content") or "").strip() or " ".join(last_results) or "Done."
+                diag_log("LLM_FINAL", f"Model produced final response: \"{final_text[:120]}\"",
+                         content=final_text)
+                return final_text
             messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
             last_results = []
             for call in calls:
@@ -148,10 +154,15 @@ class OpenRouterPlanner:
                     args = json.loads(fn.get("arguments") or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                result = execute(fn.get("name", ""), args if isinstance(args, dict) else {})
+                tool_name = fn.get("name", "")
+                diag_log("LLM_TOOL_CALL", f"Model decided to call tool '{tool_name}'",
+                         tool=tool_name, args=args, tool_call_id=call.get("id"))
+                result = execute(tool_name, args if isinstance(args, dict) else {})
                 last_results.append(result)
                 messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": result})
-        return " ".join(last_results) or "I couldn't finish that."
+        final_fallback = " ".join(last_results) or "I couldn't finish that."
+        diag_log("LLM_MAX_STEPS", f"Max steps reached, fallback: \"{final_fallback[:120]}\"", content=final_fallback)
+        return final_fallback
 
     def explain_result(self, ctx: TurnContext, summary: str, output: str, ok: bool) -> str:
         """A device just finished a command the user asked for: answer their request from the real output."""

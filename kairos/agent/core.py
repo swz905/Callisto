@@ -18,6 +18,7 @@ from kairos.agent.intents import confirmation
 from kairos.agent.llm import LLMStack, TurnContext
 from kairos.agent.openrouter import LLMUnavailable
 from kairos.agent.tools import TOOL_SPECS, UNLOCKED_TOOLS, ToolResult, Toolbox, Turn, capability_for, summarize
+from kairos.diag import diag_log
 from kairos.memory import describe_habit
 from kairos.models import EventEnvelope, new_id
 from kairos.policy import Decision
@@ -195,17 +196,25 @@ class Agent:
             meta = {"action_id": aid, "origin_device": turn.device_id, "tainted": tainted,
                     "taint_sources": turn.taint.describe() if tainted else None,
                     "influenced_by": turn.taint.event_ids if tainted else []}
+            diag_log("POLICY_CHECK", f"Tool '{name}' -> decision: {decision.value} (target={target}, cap={capability}, aid={aid})",
+                     tool=name, target=target, decision=decision.value, capability=capability, action_id=aid, args=args)
             if decision == Decision.DENY:
+                diag_log("POLICY_DENIED", f"Tool '{name}' was DENIED by policy", tool=name, target=target, capability=capability)
                 self.k.audit.record(name, args, capability, "denied", summary, target, causes, **meta)
                 return f"I'm not allowed to {summary}.", aid, {}
             if decision == Decision.CONFIRM:
+                diag_log("POLICY_CONFIRM", f"Tool '{name}' requires human confirmation", tool=name, summary=summary)
                 self.k.audit.record(name, args, capability, "pending_confirmation", summary, target, causes, **meta)
                 return f"Just to confirm: {summary}? Say yes or no.", aid, {}
         turn.action_id = aid
+        diag_log("TOOL_START", f"Running tool '{name}' (action_id={aid})", tool=name, action_id=aid, args=args)
         try:
             result = self._run_tool(name, args, turn, is_plugin)
+            diag_log("TOOL_RETURN", f"Tool '{name}' returned (len={len(result.text)}): \"{result.text[:120]}\"",
+                     tool=name, action_id=aid, text=result.text, data=result.data)
         except Exception as exc:  # a tool failing must not kill the turn
             log.exception("tool %s failed", name)
+            diag_log("TOOL_ERROR", f"Tool '{name}' FAILED: {exc!r}", tool=name, action_id=aid, error=repr(exc))
             with self.k.lock:
                 self.k.audit.record(name, args, capability, "failed", summary, target, causes, result=str(exc), **meta)
             return f"Something went wrong while trying to {summary}.", aid, {}

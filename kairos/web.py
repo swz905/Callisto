@@ -24,6 +24,7 @@ Safety (enforced in code, not left to the model):
 
 from __future__ import annotations
 
+import base64
 import ipaddress
 import logging
 import queue
@@ -340,6 +341,22 @@ class _BingParser(HTMLParser):
             self.results[-1][self.mode] += data
 
 
+def _unwrap_bing_url(url: str) -> str:
+    """Extract destination URL from Bing click-tracking wrapper (ck/a?...&u=a1<base64>)."""
+    if "bing.com/ck/a" in url:
+        try:
+            u = parse_qs(urlparse(url).query).get("u", [None])[0]
+            if u and u.startswith("a1"):
+                raw = u[2:]
+                raw += "=" * (-len(raw) % 4)
+                decoded = base64.urlsafe_b64decode(raw).decode("utf-8", errors="ignore")
+                if decoded.startswith(("http://", "https://")):
+                    return decoded
+        except Exception:
+            pass
+    return url
+
+
 def parse_results(html: str, engine: str, limit: int = 8) -> list[SearchResult]:
     parser = _BingParser() if engine == "bing" else _DdgParser()
     try:
@@ -348,8 +365,11 @@ def parse_results(html: str, engine: str, limit: int = 8) -> list[SearchResult]:
         pass
     out, seen = [], set()
     for r in parser.results:
-        url = r.get("url")
-        if not url or not url.startswith(("http://", "https://")) or url in seen:
+        raw_url = r.get("url")
+        if not raw_url:
+            continue
+        url = _unwrap_bing_url(raw_url)
+        if not url.startswith(("http://", "https://")) or url in seen:
             continue
         seen.add(url)
         out.append(SearchResult(len(out) + 1, re.sub(r"\s+", " ", r["title"]).strip() or url,

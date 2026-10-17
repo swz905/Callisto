@@ -16,4 +16,7 @@ avatar_crop.png
 VPS_ACCESS.txt
 *.tar.gz
 create_shortcut.ps1
+logs/
+*.log
+scratch/
 

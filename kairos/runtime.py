@@ -17,6 +17,7 @@ from kairos.digest import MemoryDigest
 from kairos.email_imap import ImapPoller
 from kairos.embed import make_embedder
 from kairos.explain import Explainer
+from kairos.diag import diag_log
 from kairos.family import FamilyMemory
 from kairos.gateway import Gateway, LocalGateway
 from kairos.graph.client import Graph
@@ -112,10 +113,20 @@ class Kairos:
     def wait_for_device_result(self, action_id: str, timeout: float = 3.5) -> tuple[bool, str] | None:
         ev = self._action_waiters.get(action_id)
         if not ev:
+            diag_log("WAITER_MISS", f"No registered waiter for action {action_id}", action_id=action_id)
             return None
-        ev.wait(timeout=timeout)
+        diag_log("WAITER_WAIT", f"Waiting up to {timeout}s for action {action_id} result...", action_id=action_id, timeout=timeout)
+        finished = ev.wait(timeout=timeout)
         self._action_waiters.pop(action_id, None)
-        return self._action_results.pop(action_id, None)
+        res = self._action_results.pop(action_id, None)
+        if res:
+            ok, output = res
+            diag_log("WAITER_HIT", f"Waiter received action {action_id} result (ok={ok}, len={len(output)}): \"{output[:100]}\"",
+                     action_id=action_id, ok=ok, output=output)
+        else:
+            diag_log("WAITER_TIMEOUT", f"Timed out waiting {timeout}s for action {action_id}",
+                     action_id=action_id, timeout=timeout, finished=finished)
+        return res
 
     def refresh_devices(self) -> None:
         try:
@@ -233,12 +244,16 @@ class Kairos:
     def device_result(self, action_id: str, ok: bool, output: str) -> dict | None:
         """A device reports the outcome of an exec/delete/download/upload/clipboard read: update the original
         Action and tell the user on the device the request came from (`origin_device`)."""
+        has_waiter = hasattr(self, "_action_waiters") and action_id in self._action_waiters
+        diag_log("DEVICE_RESULT_HUB", f"Action {action_id} reported (ok={ok}, waiter_active={has_waiter}): \"{output[:120]}\"",
+                 action_id=action_id, ok=ok, output=output, waiter_active=has_waiter)
+        if has_waiter:
+            self._action_results[action_id] = (ok, output)
+            self._action_waiters[action_id].set()
         with self.lock:
-            if hasattr(self, "_action_waiters") and action_id in self._action_waiters:
-                self._action_results[action_id] = (ok, output)
-                self._action_waiters[action_id].set()
             row = self.graph.one("get_action", id=action_id)
             if not row:
+                diag_log("DEVICE_RESULT_UNKNOWN", f"Action {action_id} not found in graph database", action_id=action_id)
                 log.warning("result for unknown action %s", action_id)
                 return None
             keep = 4000 if row["tool"] == "run_command" else 500  # commands keep their full output in the audit
