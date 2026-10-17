@@ -248,43 +248,109 @@ class PCAgent:
         except Exception as exc:
             print(f"clipboard set failed: {exc!r}")
 
+    def _focus_window(self, app_name: str) -> bool:
+        """Bring target application window to foreground using native Win32 APIs."""
+        if not app_name:
+            return True
+        try:
+            import ctypes
+            import ctypes.wintypes
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+
+            hwinsta = user32.OpenWindowStationW("WinSta0", False, 0x037F)
+            if hwinsta:
+                user32.SetProcessWindowStation(hwinsta)
+            hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
+            if hdesk:
+                user32.SetThreadDesktop(hdesk)
+
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            candidates = []
+
+            def enum_cb(hwnd, lparam):
+                pid = ctypes.wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                if pid.value:
+                    h_proc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+                    if h_proc:
+                        buf = ctypes.create_unicode_buffer(1024)
+                        size = ctypes.wintypes.DWORD(1024)
+                        pname = ""
+                        if kernel32.QueryFullProcessImageNameW(h_proc, 0, buf, ctypes.byref(size)):
+                            pname = buf.value.lower()
+                        kernel32.CloseHandle(h_proc)
+
+                        tlen = user32.GetWindowTextLengthW(hwnd)
+                        tbuf = ctypes.create_unicode_buffer(tlen + 1)
+                        user32.GetWindowTextW(hwnd, tbuf, tlen + 1)
+                        title = tbuf.value
+
+                        target = app_name.lower()
+                        if target in pname or (title and target in title.lower()):
+                            if title and "tray" not in title.lower() and "ime" not in title.lower():
+                                candidates.append((hwnd, pid.value, title))
+                return True
+
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+            user32.EnumDesktopWindows(hdesk, WNDENUMPROC(enum_cb), 0)
+
+            if candidates:
+                hwnd = candidates[0][0]
+                # SW_RESTORE = 9 restores/unminimizes even from system tray
+                user32.ShowWindow(hwnd, 9)
+                # Bypass Windows focus stealing lock with Alt key toggle
+                user32.keybd_event(0x12, 0, 0, 0)
+                user32.SetForegroundWindow(hwnd)
+                user32.keybd_event(0x12, 0, 2, 0)
+                time.sleep(0.35)
+                return True
+        except Exception as e:
+            print(f"[pc_agent] _focus_window error: {e}")
+        return False
+
     def type_message(self, a: dict, action_id: str | None) -> None:
         """Simulate typing/pasting a message into WhatsApp, Telegram, or any chat application.
         If recipient is specified, automatically searches for and opens their chat first via Ctrl+F."""
         text = a.get("text", "")
         recipient = (a.get("recipient") or "").strip()
         app_name = (a.get("app") or "").strip()
-        press_enter = a.get("press_enter", True)
+        press_enter = bool(a.get("press_enter", True))
 
         try:
+            # 1. Focus application window natively (handles minimized/tray state, Qt/Electron apps, Unicode titles)
+            focused = self._focus_window(app_name)
             app_clean = app_name.replace("'", "''").strip()
 
-            # 1. If recipient specified: activate app, search contact (Ctrl+F), select chat (Enter)
+            # 2. If recipient specified: ensure window is active, search contact (Ctrl+F), select chat (Enter)
             if recipient:
                 self._set_clipboard_native(recipient)
                 ps_search = f"""
 $ws = New-Object -ComObject WScript.Shell
-$act = $true
-if ('{app_clean}') {{
+$act = {'$true' if focused else '$false'}
+if (-not $act -and '{app_clean}') {{
     $act = $ws.AppActivate('{app_clean}')
     if (-not $act) {{
-        $p = Get-Process | Where-Object {{ $_.MainWindowTitle -match '{app_clean}' -or $_.ProcessName -match '{app_clean}' }} | Select-Object -First 1
-        if ($p -and $p.MainWindowTitle) {{
-            $act = $ws.AppActivate($p.MainWindowTitle)
+        $p = Get-Process | Where-Object {{ $_.ProcessName -match '{app_clean}' -or $_.MainWindowTitle -match '{app_clean}' }} | Select-Object -First 1
+        if ($p) {{
+            $act = $ws.AppActivate($p.Id)
         }}
     }}
-    Start-Sleep -Milliseconds 450
+    Start-Sleep -Milliseconds 350
 }}
-if (-not $act) {{
+if (-not $act -and '{app_clean}') {{
     [Console]::Error.WriteLine("Could not find or focus window matching '{app_clean}'")
     exit 2
 }}
-# Focus search bar (Ctrl+F is universal across WhatsApp, Telegram, Slack)
+# Clear any modal / search focus
+$ws.SendKeys('{{ESC}}')
+Start-Sleep -Milliseconds 200
+# Focus search bar (universal across WhatsApp, Telegram, Slack)
 $ws.SendKeys('^f')
 Start-Sleep -Milliseconds 350
 # Paste contact name
 $ws.SendKeys('^v')
-Start-Sleep -Milliseconds 600
+Start-Sleep -Milliseconds 700
 # Press Enter to open the top matched conversation
 $ws.SendKeys('{{ENTER}}')
 Start-Sleep -Milliseconds 500
@@ -293,11 +359,11 @@ Start-Sleep -Milliseconds 500
                                      capture_output=True, text=True, timeout=15,
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 if res.returncode != 0:
-                    err = res.stderr.strip() or f"Failed to activate '{app_name}'"
+                    err = res.stderr.strip() or f"Failed to activate '{app_name}' or select '{recipient}'"
                     self.result(action_id, False, err)
                     return
 
-            # 2. Paste message into the chat and optionally hit Enter
+            # 3. Paste message into the chat and optionally hit Enter
             if text:
                 if not self._set_clipboard_native(text):
                     subprocess.run(["powershell", "-NoProfile", "-Command", "$input | Set-Clipboard"],
@@ -305,24 +371,24 @@ Start-Sleep -Milliseconds 500
 
                 ps_type = f"""
 $ws = New-Object -ComObject WScript.Shell
-$act = $true
-if ('{app_clean}' -and -not '{recipient}') {{
+$act = {'$true' if (focused or recipient) else '$false'}
+if (-not $act -and '{app_clean}') {{
     $act = $ws.AppActivate('{app_clean}')
     if (-not $act) {{
-        $p = Get-Process | Where-Object {{ $_.MainWindowTitle -match '{app_clean}' -or $_.ProcessName -match '{app_clean}' }} | Select-Object -First 1
-        if ($p -and $p.MainWindowTitle) {{
-            $act = $ws.AppActivate($p.MainWindowTitle)
+        $p = Get-Process | Where-Object {{ $_.ProcessName -match '{app_clean}' -or $_.MainWindowTitle -match '{app_clean}' }} | Select-Object -First 1
+        if ($p) {{
+            $act = $ws.AppActivate($p.Id)
         }}
     }}
-    Start-Sleep -Milliseconds 450
+    Start-Sleep -Milliseconds 350
 }}
-if (-not $act) {{
+if (-not $act -and '{app_clean}') {{
     [Console]::Error.WriteLine("Could not find or focus window matching '{app_clean}'")
     exit 2
 }}
 $ws.SendKeys('^v')
-if ({'true' if press_enter else 'false'}) {{
-    Start-Sleep -Milliseconds 150
+if ({'$true' if press_enter else '$false'}) {{
+    Start-Sleep -Milliseconds 200
     $ws.SendKeys('{{ENTER}}')
 }}
 """
