@@ -130,4 +130,16 @@ def test_phone_tools_and_ui_messaging(monkeypatch):
     res = toolbox.run("phone_ui_dump", {}, turn)
     assert k.gateway.last.kind == "ui_dump"
 
+    # 4. Test PC read_notifications
+    res = toolbox.run("read_notifications", {"app": "Telegram", "query": "Anushka"}, turn)
+    assert res.data["dispatched"] is True
+    assert k.gateway.last.kind == "notifications_get"
+    assert k.gateway.last.args["app"] == "Telegram"
+    assert k.gateway.last.args["query"] == "Anushka"
+
+    # 5. Test PC take_screenshot
+    res = toolbox.run("take_screenshot", {}, turn)
+    assert res.data["dispatched"] is True
+    assert k.gateway.last.kind == "screenshot"
+
 

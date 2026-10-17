@@ -52,7 +52,7 @@ async function startListening() {
   try {
     VOICE.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   } catch (e) {
-    setVoiceState("idle", "Microphone blocked: allow it in the browser (needs localhost or HTTPS)");
+    setVoiceState("idle", "Browser mic blocked on HTTP: Use Desktop Avatar on PC or enable in chrome://flags");
     return;
   }
   VOICE.ctx = new (window.AudioContext || window.webkitAudioContext)();

@@ -102,7 +102,7 @@ class Mouth:
 
 
 class Ears:
-    """Microphone -> WAV bytes, ending on a pause. Needs sounddevice + numpy."""
+    """Microphone -> text, ending on a pause. Runs local faster-whisper on PC to bypass browser/HTTP limits."""
 
     @staticmethod
     def available() -> bool:
@@ -112,6 +112,16 @@ class Ears:
 
     def __init__(self):
         self.cancelled = False
+        self._model = None
+
+    def _get_whisper(self):
+        if self._model is None:
+            try:
+                from faster_whisper import WhisperModel
+                self._model = WhisperModel("base.en", device="cpu", compute_type="int8")
+            except Exception as e:
+                print(f"[Ears] Local faster-whisper init: {e}")
+        return self._model
 
     def listen(self) -> bytes | None:
         import numpy as np
@@ -132,6 +142,41 @@ class Ears:
         if self.cancelled or vad.speech < vad.min_speech_s:
             return None
         return write_wav(np.concatenate(frames).astype("int16"))
+
+    def listen_and_transcribe(self) -> str | None:
+        """Records from PC microphone and transcribes locally on the PC using faster-whisper."""
+        import numpy as np
+        import sounddevice as sd
+
+        self.cancelled = False
+        vad, frames = VoiceActivity(), []
+        try:
+            with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=FRAME) as stream:
+                while not self.cancelled:
+                    data, _ = stream.read(FRAME)
+                    f = data.flatten()
+                    frames.append(f)
+                    rms = float(np.sqrt(np.mean(f.astype("float32") ** 2)))
+                    verdict = vad.feed(rms, FRAME / SAMPLE_RATE)
+                    if verdict != "listen":
+                        break
+        except Exception as e:
+            print(f"[Ears] Mic stream error: {e}")
+            return None
+
+        if self.cancelled or vad.speech < vad.min_speech_s or not frames:
+            return None
+
+        audio = np.concatenate(frames).astype("float32") / 32768.0
+        model = self._get_whisper()
+        if model:
+            try:
+                segments, _ = model.transcribe(audio, language="en", vad_filter=True, beam_size=1)
+                text = " ".join(s.text.strip() for s in segments).strip()
+                return text or None
+            except Exception as exc:
+                print(f"[Ears] Local whisper transcription error: {exc}")
+        return None
 
 
 # --- the window -------------------------------------------------------------------------------------
@@ -565,28 +610,41 @@ class PetApp:
         try:
             while True:
                 self.events.put(("busy", "listening"))
-                self.events.put(("bubble", Bubble("🎙️ Listening... (speak now)", 10, "status")))
-                wav = self.ears.listen()
-                if wav is None:
+                self.events.put(("bubble", Bubble("🎙️ Listening... (speak into PC mic)", 10, "status")))
+                # Transcribe speech locally on the PC with faster-whisper (bypasses browser HTTPS restrictions)
+                text = self.ears.listen_and_transcribe() if self.ears else None
+                if not text:
+                    # Fallback to wav upload if local whisper model not ready
+                    wav = self.ears.listen() if self.ears else None
+                    if wav is not None:
+                        try:
+                            r = self.hub.voice(wav)
+                            text = r.get("text")
+                        except Exception:
+                            pass
+
+                if not text:
                     if self.voice_chat:
                         self.events.put(("bubble", Bubble("Voice chat paused. Click me when you want me.", 4, "speaking")))
                     else:
-                        self.events.put(("bubble", Bubble("No speech detected. Click me to speak.", 3, "speaking")))
+                        self.events.put(("bubble", Bubble("No speech detected. Click me to speak or Ctrl+K to type.", 3, "speaking")))
                     return
+
                 self.events.put(("busy", "thinking"))
-                self.events.put(("bubble", Bubble("⏳ Transcribing & thinking...", 8, "status")))
+                self.events.put(("bubble", Bubble(f"“{shorten(text, 80)}”\n\n⏳ Thinking...", 8, "status")))
                 try:
-                    r = self.hub.voice(wav)
+                    reply = self.hub.chat(text)
                 except Exception as exc:
-                    self.events.put(("bubble", Bubble(shorten(f"Voice didn't work: {exc}", 200), 7, "alert")))
+                    self.events.put(("bubble", Bubble(shorten(f"Hub error: {exc}", 200), 7, "alert")))
                     return
-                if not r.get("text"):
-                    self.events.put(("bubble", Bubble("Sorry, I couldn't make that out.", 3, "speaking")))
+
+                if not reply:
+                    self.events.put(("bubble", Bubble("Done.", 3, "speaking")))
                     if not self.voice_chat:
                         return
                     continue
-                reply = r.get("reply") or ""
-                self.events.put(("bubble", Bubble(f"“{shorten(r['text'], 80)}”\n\n{shorten(reply, 260)}",
+
+                self.events.put(("bubble", Bubble(f"“{shorten(text, 80)}”\n\n{shorten(reply, 260)}",
                                                   max(5, len(reply.split()) * 0.4 + 3), "speaking")))
                 self.events.put(("busy", "speaking"))
                 self.mouth.say(reply)

@@ -174,6 +174,10 @@ class PCAgent:
             self.clipboard_set(a.get("text", ""))
         elif kind == "type_message":
             threading.Thread(target=self.type_message, args=(a, msg.get("action_id")), daemon=True).start()
+        elif kind == "screenshot":
+            threading.Thread(target=self.take_screenshot, args=(a, msg.get("action_id")), daemon=True).start()
+        elif kind == "notifications_get":
+            threading.Thread(target=self.get_notifications, args=(a, msg.get("action_id")), daemon=True).start()
         else:
             print(f"unknown message: {msg}")
 
@@ -408,6 +412,122 @@ if ({'$true' if press_enter else '$false'}) {{
             dest = f"{app_name}" if app_name else "active window"
             who = f" to {recipient}" if recipient else ""
             self.result(action_id, True, f"Typed and {'sent' if press_enter else 'pasted'} message{who} in {dest}")
+        except Exception as exc:
+            self.result(action_id, False, repr(exc))
+
+    def get_notifications(self, a: dict, action_id: str | None) -> None:
+        """Read recent Windows toast notifications from wpndatabase.db with optional filtering."""
+        import sqlite3
+        import tempfile
+        import xml.etree.ElementTree as ET
+
+        target_app = (a.get("app") or "").strip().lower()
+        query = (a.get("query") or "").strip().lower()
+        limit = int(a.get("limit") or 10)
+
+        db_path = os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db")
+        if not os.path.exists(db_path):
+            self.result(action_id, False, "Windows notification database not found")
+            return
+
+        fd, tmp_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            shutil.copy2(db_path, tmp_path)
+            con = sqlite3.connect(tmp_path)
+            cur = con.cursor()
+            sql = """
+            SELECT n.ArrivalTime, h.PrimaryId, n.Payload
+            FROM Notification n
+            LEFT JOIN NotificationHandler h ON n.HandlerId = h.RecordId
+            ORDER BY n.ArrivalTime DESC
+            LIMIT 40
+            """
+            cur.execute(sql)
+            rows = cur.fetchall()
+            con.close()
+
+            results = []
+            for arr_time, app_id, payload in rows:
+                app_name = (app_id or "System").split("!")[0].split(".")[-1]
+                if "telegram" in (app_id or "").lower():
+                    app_name = "Telegram"
+                elif "whatsapp" in (app_id or "").lower():
+                    app_name = "WhatsApp"
+                elif "yourphone" in (app_id or "").lower():
+                    app_name = "Phone Link"
+                elif "screensketch" in (app_id or "").lower():
+                    app_name = "Snipping Tool"
+
+                texts = []
+                if isinstance(payload, bytes):
+                    try:
+                        root = ET.fromstring(payload.decode("utf-8", errors="ignore"))
+                        texts = [e.text.strip() for e in root.iter() if e.text and e.text.strip()]
+                    except Exception:
+                        pass
+                elif isinstance(payload, str):
+                    texts = [payload.strip()]
+
+                combined = " — ".join(texts)
+                if not combined:
+                    continue
+
+                if target_app and target_app not in app_name.lower() and target_app not in (app_id or "").lower():
+                    continue
+
+                if query and query not in combined.lower():
+                    continue
+
+                results.append(f"• [{app_name}] {combined}")
+                if len(results) >= limit:
+                    break
+
+            if not results:
+                filter_info = f" matching '{query or target_app}'" if (query or target_app) else ""
+                self.result(action_id, True, f"No recent PC notifications found{filter_info}.")
+            else:
+                formatted = f"Found {len(results)} notification(s):\n" + "\n".join(results)
+                self.result(action_id, True, formatted)
+        except Exception as exc:
+            self.result(action_id, False, f"Failed reading notifications: {exc!r}")
+        finally:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+    def take_screenshot(self, a: dict, action_id: str | None) -> None:
+        """Capture the PC desktop screen and save to the sandbox folder."""
+        try:
+            ts = int(time.time())
+            filename = f"screenshot_{ts}.png"
+            dest_dir = Path(a.get("dest") or self.sandbox)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / filename
+
+            ps_code = f"""
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+$bmp.Save('{dest_path.as_posix()}', [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose()
+$bmp.Dispose()
+"""
+            res = subprocess.run(["powershell", "-NoProfile", "-Command", ps_code],
+                                 capture_output=True, text=True, timeout=15,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if res.returncode == 0 and dest_path.is_file():
+                kb = round(dest_path.stat().st_size / 1024, 1)
+                self.result(action_id, True, f"Screenshot captured and saved to {dest_path} ({kb} KB)")
+                self.emit("file.created", {"path": str(dest_path), "name": filename, "type": "screenshot", "size": dest_path.stat().st_size})
+            else:
+                err = res.stderr.strip() or "Failed to capture screenshot"
+                self.result(action_id, False, err)
         except Exception as exc:
             self.result(action_id, False, repr(exc))
 

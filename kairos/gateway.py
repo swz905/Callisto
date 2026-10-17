@@ -72,6 +72,8 @@ class LocalGateway:
             self._report(msg, True, f"(simulated) pressed key {msg.args.get('key')}")
         elif msg.kind == "screenshot":
             self._report(msg, True, f"(simulated) captured screenshot to {msg.args.get('path')}")
+        elif msg.kind == "notifications_get":
+            self._report(msg, True, "(simulated) [WhatsApp] Anushka: Hey are you free? (5m ago)")
         elif msg.kind == "ui_dump":
             self._report(msg, True, "(simulated) UI dump: Button 'OK' @ [100,200][300,400]")
         else:

@@ -101,7 +101,7 @@ class EventEnvelope(BaseModel):
 OutboundKind = Literal["alert", "speak", "open", "download", "exec", "delete", "status_request",
                        "upload", "clipboard_get", "clipboard_set", "type_message",
                        "chat_send", "file_list", "file_pull", "file_push", "tap", "swipe",
-                       "type", "key", "keyevent", "screenshot", "ui_dump", "app_launch"]
+                       "type", "key", "keyevent", "screenshot", "ui_dump", "app_launch", "notifications_get"]
 
 
 class Outbound(BaseModel):

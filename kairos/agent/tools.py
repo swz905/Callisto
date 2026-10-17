@@ -134,6 +134,12 @@ TOOL_SPECS: dict[str, tuple[str, str, dict]] = {
                              recipient=_s("Name of the contact or group to search and open in the chat app (e.g. 'Rahul', 'Mom'); omit if chat is already open"),
                              app=_s("Target app or window title e.g. 'WhatsApp', 'Telegram', 'Chrome', or omit for currently active window"),
                              press_enter=B, device=DEVICE)),
+    "read_notifications": ("read", "Read recent Windows PC notifications (from WhatsApp, Telegram, Phone Link SMS, OTPs, system alerts). Filter by app or query keyword.",
+                           _obj(app=_s("App name to filter, e.g. 'Telegram', 'WhatsApp', 'Phone'"),
+                                query=_s("Keyword or sender to filter in notification text"),
+                                limit=I, device=DEVICE)),
+    "take_screenshot": ("file.open", "Capture a screenshot of the PC desktop/screen.",
+                        _obj(device=DEVICE)),
     "phone_send_chat": ("link.open", "Send a message (WhatsApp, SMS, or Telegram) to someone via the phone.",
                         _obj(["recipient", "message"], recipient=_s("Recipient phone number or name"),
                              message=_s("Message text to send"),
@@ -797,6 +803,36 @@ class Toolbox:
         action_verb = "Sent message" if press_enter else "Typed draft"
         return ToolResult(f"{action_verb}{who} in {dest}.",
                           {"text": message, "recipient": recipient, "app": app, "press_enter": press_enter, "dispatched": True})
+
+    def t_read_notifications(self, turn: Turn, app: str | None = None, query: str | None = None,
+                              limit: int | None = 10, device: str | None = None) -> ToolResult:
+        target = self._resolve_device(device, self.k.devices.get("pc", turn.device_id))
+        filter_parts = []
+        if app:
+            filter_parts.append(f"app '{app}'")
+        if query:
+            filter_parts.append(f"matching '{query}'")
+        desc = (" for " + " and ".join(filter_parts)) if filter_parts else ""
+        self.k.gateway.send(Outbound(
+            kind="notifications_get",
+            device_id=target,
+            text=f"Reading PC notifications{desc}",
+            args={"app": app, "query": query, "limit": limit or 10},
+            action_id=turn.action_id
+        ))
+        return ToolResult(f"Checking PC notifications{desc} on {self._dev_name(target)}...",
+                          {"app": app, "query": query, "dispatched": True})
+
+    def t_take_screenshot(self, turn: Turn, device: str | None = None) -> ToolResult:
+        target = self._resolve_device(device, self.k.devices.get("pc", turn.device_id))
+        self.k.gateway.send(Outbound(
+            kind="screenshot",
+            device_id=target,
+            text="Capturing PC desktop screenshot",
+            args={},
+            action_id=turn.action_id
+        ))
+        return ToolResult(f"Capturing screenshot on {self._dev_name(target)}...", {"dispatched": True})
 
     # --- read-only web --------------------------------------------------------------------
     def resolve_url_ref(self, ref: str | None, turn: Turn) -> str | None:
