@@ -80,25 +80,30 @@ class DownloadWatcher:
         self.claims: dict[str, tuple[str, str]] = {}  # temp path we are about to create -> (id, url)
 
     def start(self):
-        from watchdog.events import FileSystemEventHandler
-        from watchdog.observers import Observer
+        try:
+            from watchdog.events import FileSystemEventHandler
+            from watchdog.observers import Observer
 
-        outer = self
+            outer = self
 
-        class Handler(FileSystemEventHandler):
-            def on_created(self, ev):
-                if not ev.is_directory:
-                    outer.created(ev.src_path)
+            class Handler(FileSystemEventHandler):
+                def on_created(self, ev):
+                    if not ev.is_directory:
+                        outer.created(ev.src_path)
 
-            def on_moved(self, ev):
-                if not ev.is_directory:
-                    outer.moved(ev.src_path, ev.dest_path)
+                def on_moved(self, ev):
+                    if not ev.is_directory:
+                        outer.moved(ev.src_path, ev.dest_path)
 
-        observer = Observer()
-        observer.schedule(Handler(), str(self.folder), recursive=False)
-        observer.daemon = True
-        observer.start()
-        return observer
+            observer = Observer()
+            observer.schedule(Handler(), str(self.folder), recursive=False)
+            observer.daemon = True
+            observer.start()
+            return observer
+        except ImportError:
+            print(f"[pc_agent] Notice: 'watchdog' package not installed in current Python environment. "
+                  f"Downloads folder auto-watch is disabled. Run via .venv to enable all features.")
+            return None
 
     def created(self, path: str) -> None:
         if not is_temp(path) or path in self.ids:
