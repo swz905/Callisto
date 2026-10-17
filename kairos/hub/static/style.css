@@ -486,26 +486,27 @@ button, input, select { font: inherit; color: inherit; }
   border: 1px solid rgba(100, 116, 139, 0.2);
 }
 
-/* Activate Button: [ ⚡ Activate  F9 ] matching screenshot */
+/* Activate Button: normal taskbar button without purple bg */
 .activate-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: #6086f6;
-  color: #0f172a;
-  border: 0;
-  padding: 6px 14px;
-  border-radius: 10px;
+  gap: 7px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 10px;
+  border-radius: 999px;
   cursor: pointer;
-  font-weight: 700;
-  font-size: 13px;
-  box-shadow: 0 4px 14px rgba(96, 134, 246, 0.35);
+  font-weight: 600;
+  font-size: 12px;
+  box-shadow: none;
   transition: all 0.15s ease;
   user-select: none;
 }
 .activate-btn:hover {
-  background: #4f77f4;
-  box-shadow: 0 6px 20px rgba(96, 134, 246, 0.5);
+  background: rgba(17, 26, 40, 0.8);
+  border-color: rgba(0, 240, 255, 0.35);
+  color: var(--text);
   transform: translateY(-1px);
 }
 .activate-btn:active {
@@ -513,21 +514,25 @@ button, input, select { font: inherit; color: inherit; }
 }
 .activate-btn .btn-icon {
   font-size: 13px;
-  color: #0f172a;
+  color: #38bdf8;
 }
 .activate-btn .btn-label {
   letter-spacing: 0.01em;
-  color: #0f172a;
+  color: inherit;
 }
 .activate-btn .btn-kbd {
-  background: #4663cb;
-  color: #ffffff;
-  padding: 2px 7px;
-  border-radius: 6px;
-  font-size: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
   font-family: ui-monospace, Consolas, monospace;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.activate-btn:hover .btn-kbd {
+  color: #7dd3fc;
+  border-color: rgba(0, 240, 255, 0.25);
 }
 
 .arch-link {
