@@ -177,6 +177,7 @@ class PetApp:
 
         self.bubble = None
         self.bubble_after = None
+        self.input_bubble = None
         self._drag = None
         self._hover_after = None
         self._seq_after = None
@@ -193,7 +194,8 @@ class PetApp:
         root.bind("<F9>", lambda e: self.events.put(("hotkey_f9", None)))
         root.bind("<Control-Shift-K>", lambda e: self.events.put(("hotkey_f9", None)))
         root.bind("<Control-Shift-k>", lambda e: self.events.put(("hotkey_f9", None)))
-        root.bind("<Control-k>", lambda e: self.events.put(("hotkey_f9", None)))
+        root.bind("<Control-k>", lambda e: self.events.put(("open_input_bubble", None)))
+        root.bind("<Control-K>", lambda e: self.events.put(("open_input_bubble", None)))
 
         self._start_hotkey_listener()
         threading.Thread(target=self._poll, daemon=True).start()
@@ -207,6 +209,7 @@ class PetApp:
             import ctypes
             _attach_to_default_desktop()
             was_down = False
+            was_ctrl_k = False
             while not getattr(self, "_closing", False):
                 try:
                     # 0x78 = VK_F9; also check Ctrl+Shift+K (0x11, 0x10, 0x4B)
@@ -214,11 +217,19 @@ class PetApp:
                     ctrl = bool(ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000)
                     shift = bool(ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000)
                     k_key = bool(ctypes.windll.user32.GetAsyncKeyState(0x4B) & 0x8000)
+
                     is_down = f9 or (ctrl and shift and k_key)
                     if is_down and not was_down:
                         print("[PET HOTKEY] Activated via F9 / Ctrl+Shift+K!", flush=True)
                         self.events.put(("hotkey_f9", None))
                     was_down = is_down
+
+                    # Ctrl+K alone opens the inline typing bubble
+                    is_ctrl_k = ctrl and k_key and not shift
+                    if is_ctrl_k and not was_ctrl_k:
+                        print("[PET HOTKEY] Activated Type Bubble via Ctrl+K!", flush=True)
+                        self.events.put(("open_input_bubble", None))
+                    was_ctrl_k = is_ctrl_k
                 except Exception:
                     pass
                 time.sleep(0.06)
@@ -272,19 +283,165 @@ class PetApp:
                          font=("Segoe UI", 10), padx=10, pady=7)
         label.pack()
         label.bind("<Button-1>", lambda e: self.hide_bubble())
+
+        if "Listening..." in text:
+            type_hint = tk.Label(frame_, text="⌨️ Click here to type instead", bg=colour, fg="#58a6ff",
+                                 font=("Segoe UI", 8, "underline"), cursor="hand2", padx=10, pady=(0, 5))
+            type_hint.pack(anchor="w")
+            type_hint.bind("<Button-1>", lambda e: self._on_type_from_listening())
+
         b.update_idletasks()
-        x = self.root.winfo_x() - b.winfo_width() + 2 * self.scale  # up and to the left of the pet
-        y = self.root.winfo_y() - b.winfo_height() + 16 * self.scale
-        b.geometry(f"+{max(0, x)}+{max(0, y)}")
+        w_w, w_h = b.winfo_width(), b.winfo_height()
+        px, py = self.root.winfo_x(), self.root.winfo_y()
+        target_x = px - w_w + 2 * self.scale
+        if target_x < 10:
+            target_x = px + (W * self.scale) + 6
+        target_y = py - w_h + 16 * self.scale
+        if target_y < 10:
+            target_y = max(10, py)
+
+        b.geometry(f"+{max(10, target_x)}+{max(10, target_y)}")
         self.bubble_after = self.root.after(int(seconds * 1000), self.hide_bubble)
+
+    def _on_type_from_listening(self) -> None:
+        if self.ears:
+            self.ears.cancelled = True
+        self.turn_running = False
+        self.events.put(("busy", None))
+        self.hide_bubble()
+        self.show_input_bubble()
 
     def hide_bubble(self) -> None:
         if self.bubble_after:
             self.root.after_cancel(self.bubble_after)
             self.bubble_after = None
         if self.bubble is not None:
-            self.bubble.destroy()
+            try:
+                self.bubble.destroy()
+            except Exception:
+                pass
             self.bubble = None
+
+    def show_input_bubble(self) -> None:
+        """Sleek inline typing bubble right next to the avatar."""
+        try:
+            self.root.deiconify()
+            self.root.attributes("-topmost", True)
+            self.root.lift()
+        except Exception:
+            pass
+
+        self._cancel_sequence()
+        self.hide_bubble()
+        self.hide_input_bubble()
+
+        tk = self.tk
+        ib = self.input_bubble = tk.Toplevel(self.root)
+        ib.overrideredirect(True)
+        ib.attributes("-topmost", True)
+
+        edge = "#57f287"
+        bg_col = "#151b23"
+        entry_bg = "#0d1117"
+        fg_col = "#e6edf3"
+        muted_fg = "#8b949e"
+
+        border = tk.Frame(ib, bg=edge, padx=1, pady=1)
+        border.pack()
+
+        card = tk.Frame(border, bg=bg_col, padx=8, pady=7)
+        card.pack()
+
+        # Top header row: title & close
+        hdr = tk.Frame(card, bg=bg_col)
+        hdr.pack(fill="x", pady=(0, 5))
+
+        title_lbl = tk.Label(hdr, text="💬 Ask KAIROS", bg=bg_col, fg=edge, font=("Segoe UI", 9, "bold"))
+        title_lbl.pack(side="left")
+
+        close_lbl = tk.Label(hdr, text="✕", bg=bg_col, fg=muted_fg, font=("Segoe UI", 8, "bold"), cursor="hand2")
+        close_lbl.pack(side="right")
+        close_lbl.bind("<Button-1>", lambda e: self.hide_input_bubble())
+
+        # Middle row: Entry box + Send + Voice Mic
+        row = tk.Frame(card, bg=bg_col)
+        row.pack(fill="x")
+
+        entry = tk.Entry(row, bg=entry_bg, fg=fg_col, insertbackground=fg_col,
+                         relief="flat", font=("Segoe UI", 10), width=25,
+                         highlightthickness=1, highlightbackground="#30363d", highlightcolor=edge)
+        entry.pack(side="left", padx=(0, 4), ipady=3)
+        entry.focus_set()
+
+        def submit(e=None):
+            text = entry.get().strip()
+            if not text:
+                return
+            self.hide_input_bubble()
+            self._send_chat_message(text)
+
+        entry.bind("<Return>", submit)
+        entry.bind("<Escape>", lambda e: self.hide_input_bubble())
+
+        send_btn = tk.Label(row, text="➤", bg="#238636", fg="#ffffff", cursor="hand2",
+                            font=("Segoe UI", 9, "bold"), padx=6, pady=3)
+        send_btn.pack(side="left", padx=(0, 3))
+        send_btn.bind("<Button-1>", submit)
+
+        if self.ears:
+            mic_btn = tk.Label(row, text="🎙️", bg="#1f6feb", fg="#ffffff", cursor="hand2",
+                               font=("Segoe UI", 9), padx=5, pady=3)
+            mic_btn.pack(side="left")
+            def on_mic(e):
+                self.hide_input_bubble()
+                self.talk()
+            mic_btn.bind("<Button-1>", on_mic)
+
+        # Footer hint
+        hint = tk.Label(card, text="Enter to send · Esc to close", bg=bg_col, fg="#6e7681", font=("Segoe UI", 7))
+        hint.pack(anchor="w", pady=(3, 0))
+
+        ib.update_idletasks()
+        w_w = ib.winfo_width()
+        w_h = ib.winfo_height()
+
+        px = self.root.winfo_x()
+        py = self.root.winfo_y()
+        target_x = px - w_w - 6
+        if target_x < 10:
+            target_x = px + (W * self.scale) + 6
+        target_y = py - w_h + 16 * self.scale
+        if target_y < 10:
+            target_y = max(10, py)
+
+        ib.geometry(f"+{max(10, target_x)}+{max(10, target_y)}")
+        ib.lift()
+
+    def hide_input_bubble(self) -> None:
+        if getattr(self, "input_bubble", None) is not None:
+            try:
+                self.input_bubble.destroy()
+            except Exception:
+                pass
+            self.input_bubble = None
+
+    def _send_chat_message(self, text: str) -> None:
+        self._cancel_sequence()
+        self.brain.set_busy("thinking")
+        self.say_bubble(f"“{shorten(text, 60)}”\n⏳ Thinking...", 12, "status")
+
+        def run():
+            try:
+                reply = self.hub.chat(text)
+                self.events.put(("bubble", Bubble(shorten(reply, 350), max(5.0, len(reply.split()) * 0.4 + 3.0), "speaking")))
+                self.events.put(("busy", "speaking"))
+                self.mouth.say(reply)
+            except Exception as exc:
+                self.events.put(("bubble", Bubble(f"Couldn't reach KAIROS: {exc}", 5, "alert")))
+            finally:
+                self.events.put(("busy", None))
+
+        threading.Thread(target=run, daemon=True).start()
 
     # --- hub polling (background thread) -> UI queue --------------------------------------------------
     def _poll(self) -> None:
@@ -322,6 +479,8 @@ class PetApp:
                 self.brain.set_busy(data)
             elif kind == "hotkey_f9":
                 self.activate_with_messages()
+            elif kind == "open_input_bubble":
+                self.show_input_bubble()
             elif kind == "play_sequence":
                 self._play_message_sequence(data)
 
@@ -438,25 +597,7 @@ class PetApp:
             self.turn_running = False
 
     def type_message(self) -> None:
-        from tkinter import simpledialog
-
-        text = simpledialog.askstring("KAIROS", "Say something to KAIROS:", parent=self.root)
-        if not text:
-            return
-        self.brain.set_busy("thinking")
-
-        def run():
-            try:
-                reply = self.hub.chat(text)
-                self.events.put(("bubble", Bubble(shorten(reply, 300), max(5, len(reply.split()) * 0.4 + 3))))
-                self.events.put(("busy", "speaking"))
-                self.mouth.say(reply)
-            except Exception as exc:
-                self.events.put(("bubble", Bubble(f"Couldn't reach KAIROS: {exc}", 5, "alert")))
-            finally:
-                self.events.put(("busy", None))
-
-        threading.Thread(target=run, daemon=True).start()
+        self.show_input_bubble()
 
     # --- mouse ------------------------------------------------------------------------------------
     def _press(self, e) -> None:
@@ -471,6 +612,7 @@ class PetApp:
             self._drag = (x0, y0, wx, wy, True)
             self.root.geometry(f"+{wx + dx}+{wy + dy}")
             self.hide_bubble()
+            self.hide_input_bubble()
 
     def _release(self, e) -> None:
         moved = self._drag and self._drag[4]
@@ -483,6 +625,9 @@ class PetApp:
         clicks, self._clicks = getattr(self, "_clicks", 0), 0
         if clicks == 1:
             self._cancel_sequence()
+            if getattr(self, "input_bubble", None):
+                self.hide_input_bubble()
+                return
             self.talk()
 
     def _hover(self, inside: bool) -> None:
@@ -499,9 +644,9 @@ class PetApp:
         self.vc_var = tk.BooleanVar(value=self.voice_chat)
         self.mute_var = tk.BooleanVar(value=not self.mouth.enabled)
         m.add_command(label="Check updates (F9)", command=self.activate_with_messages)
-        m.add_command(label="Talk" + ("" if self.ears else " (pip install sounddevice numpy)"), command=self.talk,
+        m.add_command(label="💬 Type a message (Ctrl+K)", command=self.show_input_bubble)
+        m.add_command(label="🎙️ Talk" + ("" if self.ears else " (pip install sounddevice numpy)"), command=self.talk,
                       state="normal" if self.ears else "disabled")
-        m.add_command(label="Type a message…", command=self.type_message)
         m.add_checkbutton(label="Voice chat (keep listening)", variable=self.vc_var,
                           command=lambda: setattr(self, "voice_chat", self.vc_var.get()))
         m.add_checkbutton(label="Mute", variable=self.mute_var,
@@ -514,6 +659,8 @@ class PetApp:
     def _quit(self) -> None:
         self._closing = True
         self._cancel_sequence()
+        self.hide_input_bubble()
+        self.hide_bubble()
         if self.ears:
             self.ears.cancelled = True
         self.mouth.stop()
