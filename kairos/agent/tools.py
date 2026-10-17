@@ -211,8 +211,8 @@ def capability_for(name: str, args: dict) -> str:
     return TOOL_SPECS[name][0]
 
 
-# Tools that do slow network I/O: run outside the graph lock (they take it themselves for their writes).
-UNLOCKED_TOOLS = {"web_search", "read_page", "digest_memory"}
+# Tools that do slow network/device I/O: run outside the graph lock (they take it themselves for their writes).
+UNLOCKED_TOOLS = {"web_search", "read_page", "digest_memory", "read_notifications", "take_screenshot"}
 
 
 def summarize(name: str, args: dict, device_name: str) -> str:

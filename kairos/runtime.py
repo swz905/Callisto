@@ -233,10 +233,10 @@ class Kairos:
     def device_result(self, action_id: str, ok: bool, output: str) -> dict | None:
         """A device reports the outcome of an exec/delete/download/upload/clipboard read: update the original
         Action and tell the user on the device the request came from (`origin_device`)."""
+        if hasattr(self, "_action_waiters") and action_id in self._action_waiters:
+            self._action_results[action_id] = (ok, output)
+            self._action_waiters[action_id].set()
         with self.lock:
-            if hasattr(self, "_action_waiters") and action_id in self._action_waiters:
-                self._action_results[action_id] = (ok, output)
-                self._action_waiters[action_id].set()
             row = self.graph.one("get_action", id=action_id)
             if not row:
                 log.warning("result for unknown action %s", action_id)
