@@ -22,33 +22,97 @@ const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(bo
 
 const state = { devices: {}, kind: "pc", outboxSeq: 0, firstOutbox: true };
 
+function getDeviceSvg(kind, size = 14) {
+  if (kind === "phone") {
+    // Tall vertical rounded capsule outline matching user reference
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="3.5"/></svg>`;
+  }
+  if (kind === "chat" || kind === "telegram") {
+    // Sleek paper airplane / needle navigation arrow matching user reference
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="4,18 19,5 14,20 10.5,13.5"/></svg>`;
+  }
+  // Laptop outline: screen + bottom keyboard base
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="6" width="14" height="9" rx="1.5"/><line x1="3" y1="18" x2="21" y2="18" stroke-width="2"/></svg>`;
+}
+
 // ---------------------------------------------------------------- status
 async function refreshStatus() {
   const s = await api("/api/status");
   $("#graphName").textContent = s.graph;
   const llm = s.llm;
   const badge = $("#llmBadge");
+  const modelName = (llm.model || "").split("/").pop() || (llm.online ? "online" : "offline");
   if (llm.online) {
-    badge.className = "badge ok";
-    badge.textContent = `● OpenRouter · ${llm.model}`;
-    badge.title = "LLM planner online; rules are the offline backup";
+    badge.className = "model-badge ok";
+    badge.textContent = modelName;
+    badge.title = `LLM online: ${llm.model}`;
   } else {
-    badge.className = "badge warn";
-    badge.textContent = "● Offline rules";
+    badge.className = "model-badge warn";
+    badge.textContent = "offline";
     badge.title = llm.reason || "rule-based planner";
   }
   state.devices = {};
-  $("#devices").innerHTML = s.devices.map((d) => {
-    state.devices[d.kind] = d.id;
-    const cls = d.connected ? "on" : s.simulate_devices ? "sim" : "";
-    const st = d.connected ? "connected" : s.simulate_devices ? "simulated" : "offline";
-    const live = [d.foreground_app, d.battery != null && d.battery >= 0 ? `${d.battery}%${d.charging ? "⚡" : ""}` : null]
-      .filter(Boolean).join(" · ");
-    return `<span class="pill ${cls}" title="${esc(d.summary || d.id)}">${d.kind === "phone" ? "📱" : "💻"} ${esc(d.name || d.id)} · ${st}${live ? " · " + esc(live) : ""}</span>`;
-  }).join("");
+
+  // Status pill in dropdown header
+  const simBadge = $("#devicesSimStatus");
+  if (simBadge) {
+    simBadge.textContent = s.simulate_devices ? "Simulated" : "Live";
+  }
+
+  // Sort devices to match reference image: 1. Laptop (pc), 2. Phone (phone), 3. Telegram (chat)
+  const order = { pc: 1, phone: 2, chat: 3 };
+  const sorted = [...(s.devices || [])].sort((a, b) => {
+    const kA = a.kind === "chat" || (a.id && a.id.includes("telegram")) ? "chat" : a.kind;
+    const kB = b.kind === "chat" || (b.id && b.id.includes("telegram")) ? "chat" : b.kind;
+    return (order[kA] || 99) - (order[kB] || 99);
+  });
+
+  // Render overlapping avatar circle stack matching user reference
+  const devicesEl = $("#devices");
+  if (devicesEl) {
+    devicesEl.innerHTML = sorted.map((d, i) => {
+      state.devices[d.kind] = d.id;
+      const isChat = d.kind === "chat" || (d.id && d.id.includes("telegram"));
+      const dotCls = (d.connected || s.simulate_devices) ? "on" : "off";
+      const st = d.connected ? "Connected" : s.simulate_devices ? (isChat ? "Ready" : "Active") : "Offline";
+      const live = [d.foreground_app, d.battery != null && d.battery >= 0 ? `${d.battery}%${d.charging ? "⚡" : ""}` : null]
+        .filter(Boolean).join(" · ");
+      return `<div class="device-circle" style="z-index: ${i + 1};" title="${esc(d.name || d.id)} · ${st}${live ? " · " + esc(live) : ""}">
+        ${getDeviceSvg(d.kind, 14)}
+        <span class="circle-pip ${dotCls}"></span>
+      </div>`;
+    }).join("");
+  }
+
+  // Populate dropdown list with device details
+  const listEl = $("#devicesDropdownList");
+  if (listEl) {
+    listEl.innerHTML = sorted.map((d) => {
+      const isChat = d.kind === "chat" || (d.id && d.id.includes("telegram"));
+      const dotCls = isChat ? "sim" : (d.connected || s.simulate_devices) ? "online" : "offline";
+      const stLabel = d.connected ? "Connected" : s.simulate_devices ? (isChat ? "Ready" : "Active") : "Offline";
+      const batteryStr = d.battery != null && d.battery >= 0 ? `${d.battery}% ${d.charging ? "⚡" : ""}` : null;
+      const appStr = d.foreground_app ? `App: ${d.foreground_app}` : null;
+      const meta = [batteryStr, appStr].filter(Boolean);
+      return `<div class="dropdown-device-row" data-kind="${esc(d.kind)}" title="Device: ${esc(d.name || d.id)}">
+        <div class="device-row-icon">${getDeviceSvg(d.kind, 16)}</div>
+        <div class="device-row-info">
+          <div class="device-row-title">
+            <span>${esc(d.name || d.id)}</span>
+            <span class="device-row-id">${esc(d.id)}</span>
+          </div>
+          <div class="device-row-meta">
+            ${meta.length > 0 ? meta.map(m => `<span>${esc(m)}</span>`).join("<span class='stat-sep'>·</span>") : "<span>Standby</span>"}
+          </div>
+        </div>
+        <span class="device-row-badge ${dotCls}">${stLabel}</span>
+      </div>`;
+    }).join("");
+  }
+
   const c = s.counts || {};
   const total = Object.values(c).reduce((a, b) => a + b, 0);
-  $("#counts").textContent = `${total} nodes · ${c.Event || 0} events · ${c.Action || 0} actions`;
+  $("#counts").innerHTML = `<span class="stat-num">${total}</span> nodes <span class="stat-sep">·</span> <span class="stat-num">${c.Event || 0}</span> events <span class="stat-sep">·</span> <span class="stat-num">${c.Action || 0}</span> actions`;
 }
 
 // ---------------------------------------------------------------- chat
@@ -463,6 +527,292 @@ function initGraph() {
   }, { passive: false });
   $("#graphRefresh").onclick = () => refreshGraph(true);
   $("#graphWindow").onchange = () => refreshGraph(true);
+  const centerBtn = $("#graphCenter");
+  if (centerBtn) centerBtn.onclick = () => fitGraph();
+}
+
+function fitGraph() {
+  const svg = $("#graphSvg");
+  if (!svg || !G.nodes.length) return;
+  const w = svg.clientWidth || 800, h = svg.clientHeight || 600;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of G.nodes) {
+    if (n.p.x < minX) minX = n.p.x;
+    if (n.p.x > maxX) maxX = n.p.x;
+    if (n.p.y < minY) minY = n.p.y;
+    if (n.p.y > maxY) maxY = n.p.y;
+  }
+  const gw = (maxX - minX) || 200, gh = (maxY - minY) || 200;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const scale = Math.min(1.6, Math.max(0.35, Math.min((w - 80) / gw, (h - 80) / gh)));
+  G.scale = scale;
+  G.tx = (w / 2) - cx * scale;
+  G.ty = (h / 2) - cy * scale;
+  draw(false);
+}
+
+// ---------------------------------------------------------------- panel manager & resizers
+function initPanelManager() {
+  const container = $("#panelsContainer");
+  const panelChat = $("#panelChat");
+  const panelGraph = $("#panelGraph");
+  const panelSide = $("#panelSide");
+  const resizerChatGraph = $("#resizerChatGraph");
+  const resizerGraphSide = $("#resizerGraphSide");
+
+  const btnCollapseChat = $("#btnCollapseChat");
+  const stripChat = $("#stripChat");
+  const btnCollapseSide = $("#btnCollapseSide");
+  const stripSide = $("#stripSide");
+  const btnMaxGraph = $("#btnMaxGraph");
+
+  // Load preferences from localStorage
+  const saved = JSON.parse(localStorage.getItem("kairos_panels") || "{}");
+  let chatW = saved.chatW || 360;
+  let sideW = saved.sideW || 380;
+  let chatCollapsed = !!saved.chatCollapsed;
+  let sideCollapsed = !!saved.sideCollapsed;
+  let graphMaximized = !!saved.graphMaximized;
+  let chipsH = saved.chipsH !== undefined ? saved.chipsH : 115;
+  let chipsCollapsed = !!saved.chipsCollapsed;
+
+  const resizerChatChips = $("#resizerChatChips");
+  const chipsWrap = $("#chipsWrap");
+  const btnToggleChips = $("#btnToggleChips");
+  const chipsToggleIcon = $("#chipsToggleIcon");
+
+  function applyChipsLayout() {
+    if (!chipsWrap) return;
+    chipsWrap.style.setProperty("--chips-h", `${chipsH}px`);
+    chipsWrap.classList.toggle("collapsed", chipsCollapsed);
+    if (chipsToggleIcon) {
+      chipsToggleIcon.textContent = chipsCollapsed ? "▲" : "▼";
+    }
+  }
+
+  function applyLayout() {
+    container.style.setProperty("--chat-w", `${chatW}px`);
+    container.style.setProperty("--side-w", `${sideW}px`);
+    panelChat.classList.toggle("collapsed", chatCollapsed);
+    panelSide.classList.toggle("collapsed", sideCollapsed);
+    panelGraph.classList.toggle("maximized", graphMaximized);
+    if (btnMaxGraph) {
+      btnMaxGraph.textContent = graphMaximized ? "🗗" : "⛶";
+      btnMaxGraph.title = graphMaximized ? "Restore Canvas Size" : "Maximize Graph Canvas";
+    }
+    applyChipsLayout();
+  }
+
+  function saveConfig() {
+    localStorage.setItem("kairos_panels", JSON.stringify({
+      chatW, sideW, chatCollapsed, sideCollapsed, graphMaximized, chipsH, chipsCollapsed
+    }));
+  }
+
+  applyLayout();
+
+  // Vertical Resizer between Chat Messages and Suggestion Chips
+  let activeRowResizer = false;
+  let startY = 0, startChipsH = 0;
+
+  if (resizerChatChips && chipsWrap) {
+    resizerChatChips.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("#btnToggleChips")) return;
+      e.preventDefault();
+      activeRowResizer = true;
+      startY = e.clientY;
+      startChipsH = chipsWrap.getBoundingClientRect().height;
+      resizerChatChips.classList.add("active");
+      document.body.classList.add("is-row-resizing");
+      resizerChatChips.setPointerCapture(e.pointerId);
+    });
+
+    resizerChatChips.addEventListener("pointermove", (e) => {
+      if (!activeRowResizer) return;
+      const dy = e.clientY - startY;
+      // dragging up increases chips, dragging down shrinks chips to give more room to messages
+      const newH = Math.max(0, Math.min(360, startChipsH - dy));
+      chipsH = Math.round(newH);
+      chipsCollapsed = chipsH <= 15;
+      applyChipsLayout();
+    });
+
+    const stopRowResize = (e) => {
+      if (activeRowResizer) {
+        activeRowResizer = false;
+        resizerChatChips.classList.remove("active");
+        document.body.classList.remove("is-row-resizing");
+        try { resizerChatChips.releasePointerCapture(e.pointerId); } catch (_) {}
+        saveConfig();
+      }
+    };
+    resizerChatChips.addEventListener("pointerup", stopRowResize);
+    resizerChatChips.addEventListener("pointercancel", stopRowResize);
+  }
+
+  btnToggleChips?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    chipsCollapsed = !chipsCollapsed;
+    if (!chipsCollapsed && chipsH < 60) chipsH = 115;
+    applyChipsLayout();
+    saveConfig();
+  });
+
+  // Resize Chat-Graph
+  let activeResizer = null;
+  let startX = 0, startWidth = 0;
+
+  function setupResizer(resizer, type) {
+    if (!resizer) return;
+    resizer.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      activeResizer = type;
+      startX = e.clientX;
+      startWidth = type === "chat" ? panelChat.getBoundingClientRect().width : panelSide.getBoundingClientRect().width;
+      resizer.classList.add("active");
+      document.body.classList.add("is-resizing");
+      resizer.setPointerCapture(e.pointerId);
+    });
+
+    resizer.addEventListener("pointermove", (e) => {
+      if (activeResizer !== type) return;
+      const dx = e.clientX - startX;
+      if (type === "chat") {
+        const newW = Math.max(240, Math.min(window.innerWidth * 0.65, startWidth + dx));
+        chatW = Math.round(newW);
+        chatCollapsed = false;
+        panelChat.classList.remove("collapsed");
+        container.style.setProperty("--chat-w", `${chatW}px`);
+      } else if (type === "side") {
+        const newW = Math.max(260, Math.min(window.innerWidth * 0.65, startWidth - dx));
+        sideW = Math.round(newW);
+        sideCollapsed = false;
+        panelSide.classList.remove("collapsed");
+        container.style.setProperty("--side-w", `${sideW}px`);
+      }
+    });
+
+    const stopResize = (e) => {
+      if (activeResizer === type) {
+        activeResizer = null;
+        resizer.classList.remove("active");
+        document.body.classList.remove("is-resizing");
+        try { resizer.releasePointerCapture(e.pointerId); } catch (_) {}
+        saveConfig();
+        setTimeout(fitGraph, 60);
+      }
+    };
+    resizer.addEventListener("pointerup", stopResize);
+    resizer.addEventListener("pointercancel", stopResize);
+  }
+
+  setupResizer(resizerChatGraph, "chat");
+  setupResizer(resizerGraphSide, "side");
+
+  // Collapse / Expand handlers
+  btnCollapseChat?.addEventListener("click", () => {
+    chatCollapsed = true;
+    panelChat.classList.add("collapsed");
+    saveConfig();
+    setTimeout(fitGraph, 200);
+  });
+  stripChat?.addEventListener("click", () => {
+    chatCollapsed = false;
+    panelChat.classList.remove("collapsed");
+    saveConfig();
+    setTimeout(fitGraph, 200);
+  });
+
+  btnCollapseSide?.addEventListener("click", () => {
+    sideCollapsed = true;
+    panelSide.classList.add("collapsed");
+    saveConfig();
+    setTimeout(fitGraph, 200);
+  });
+  stripSide?.addEventListener("click", () => {
+    sideCollapsed = false;
+    panelSide.classList.remove("collapsed");
+    saveConfig();
+    setTimeout(fitGraph, 200);
+  });
+
+  // Maximize Graph
+  btnMaxGraph?.addEventListener("click", () => {
+    graphMaximized = !graphMaximized;
+    panelGraph.classList.toggle("maximized", graphMaximized);
+    btnMaxGraph.textContent = graphMaximized ? "🗗" : "⛶";
+    btnMaxGraph.title = graphMaximized ? "Restore Canvas Size" : "Maximize Graph Canvas";
+    saveConfig();
+    setTimeout(fitGraph, 200);
+  });
+
+  // Mobile / narrow screen panel switcher
+  const mobileButtons = $$("#mobileNav button");
+  function setMobilePanel(p) {
+    mobileButtons.forEach(b => b.classList.toggle("on", b.dataset.panel === p));
+    panelChat.classList.toggle("mobile-active", p === "chat");
+    panelGraph.classList.toggle("mobile-active", p === "graph");
+    panelSide.classList.toggle("mobile-active", p === "side");
+    if (p === "graph") setTimeout(fitGraph, 120);
+  }
+  mobileButtons.forEach(b => {
+    b.addEventListener("click", () => setMobilePanel(b.dataset.panel));
+  });
+  setMobilePanel("chat");
+
+  // ResizeObserver on graph wrapper to adjust view
+  const graphWrap = $("#graphWrap");
+  if (window.ResizeObserver && graphWrap) {
+    let roTimer = null;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(roTimer);
+      roTimer = setTimeout(() => {
+        if (G.nodes.length && G.alpha <= 0.05) {
+          draw(false);
+        }
+      }, 70);
+    });
+    ro.observe(graphWrap);
+  }
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth <= 980) {
+      const activeMobile = $("#mobileNav button.on")?.dataset.panel || "chat";
+      setMobilePanel(activeMobile);
+    }
+  });
+}
+
+function initDevicesDropdown() {
+  const wrap = $("#devicesDropdownWrap");
+  const trigger = $("#devicesTrigger");
+  if (!wrap || !trigger) return;
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    wrap.classList.toggle("open");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!wrap.contains(e.target)) {
+      wrap.classList.remove("open");
+    }
+  });
+
+  const listEl = $("#devicesDropdownList");
+  if (listEl) {
+    listEl.addEventListener("click", (e) => {
+      const row = e.target.closest(".dropdown-device-row");
+      if (!row) return;
+      const kind = row.dataset.kind;
+      if (kind && (kind === "phone" || kind === "pc")) {
+        state.kind = kind;
+        $$("#deviceSeg button").forEach((b) => {
+          b.classList.toggle("on", b.dataset.kind === kind);
+        });
+      }
+    });
+  }
 }
 
 // ---------------------------------------------------------------- F9 Assistant & Messages
@@ -521,9 +871,10 @@ if (f9Btn) f9Btn.onclick = triggerF9Sequence;
 
 // ---------------------------------------------------------------- boot
 const safe = (fn) => () => fn().catch((e) => console.warn(e));
-initChat(); initSide(); initGraph();
+initChat(); initSide(); initGraph(); initPanelManager(); initDevicesDropdown();
 safe(refreshStatus)(); safe(refreshSide)(); safe(refreshGraph)(); safe(refreshOutbox)();
 setInterval(safe(refreshStatus), 5000);
 setInterval(safe(refreshOutbox), 1500);
 setInterval(safe(refreshSide), 4000);
 setInterval(() => { if ($("#graphAuto").checked) refreshGraph(false).catch((e) => console.warn(e)); }, 8000);
+

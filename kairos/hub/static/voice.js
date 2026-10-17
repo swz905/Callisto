@@ -14,15 +14,42 @@ const V_SILENCE_MS = 900;    // stop after this much quiet once you've spoken
 const V_NO_SPEECH_MS = 7000; // give up if you say nothing
 const V_MAX_MS = 20000;
 
+function updateTaskbarVoice(s, hint) {
+  const pill = $("#taskbarVoicePill");
+  const text = $("#taskbarVoiceText");
+  if (!pill || !text) return;
+  pill.classList.remove("listening", "thinking", "speaking", "active-mode");
+
+  if (s === "listening") {
+    pill.classList.add("listening");
+    text.textContent = "Listening...";
+  } else if (s === "thinking") {
+    pill.classList.add("thinking");
+    text.textContent = "Transcribing...";
+  } else if (s === "speaking") {
+    pill.classList.add("speaking");
+    text.textContent = "Speaking...";
+  } else {
+    if (VOICE.conversation) {
+      pill.classList.add("active-mode");
+      text.textContent = "Voice: Active";
+    } else {
+      text.textContent = "Voice Agent";
+    }
+  }
+}
+
 function setVoiceState(s, hint) {
   VOICE.state = s;
   const b = $("#micBtn");
-  if (!b) return;
-  b.className = `mic ${s}`;
-  b.textContent = { idle: "🎤", listening: "●", thinking: "…", speaking: "🔊" }[s];
-  b.title = hint || { idle: "Talk (Ctrl+M)", listening: "Listening… click to stop", thinking: "Thinking…",
-    speaking: "Speaking… click to interrupt" }[s];
+  if (b) {
+    b.className = `mic ${s}`;
+    b.textContent = { idle: "🎤", listening: "●", thinking: "…", speaking: "🔊" }[s];
+    b.title = hint || { idle: "Talk (Ctrl+M)", listening: "Listening… click to stop", thinking: "Thinking…",
+      speaking: "Speaking… click to interrupt" }[s];
+  }
   $("#voiceHint").textContent = hint || (s === "listening" ? "Listening…" : s === "thinking" ? "Transcribing…" : "");
+  updateTaskbarVoice(s, hint);
 }
 
 function encodeWav(chunks, inRate) {
@@ -158,6 +185,19 @@ function maybeContinue() {
 }
 
 function initVoice() {
+  const taskbarPill = $("#taskbarVoicePill");
+  if (taskbarPill) {
+    taskbarPill.onclick = () => {
+      if (VOICE.state === "speaking") { speechSynthesis.cancel(); setVoiceState("idle"); return; }
+      if (VOICE.state === "listening") { stopListening(true); return; }
+      if (VOICE.state === "thinking") return;
+      const chk = $("#voiceMode");
+      if (chk) chk.checked = true;
+      VOICE.conversation = true;
+      startListening();
+    };
+  }
+
   $("#micBtn").onclick = () => {
     if (VOICE.state === "speaking") { speechSynthesis.cancel(); setVoiceState("idle"); return; }
     if (VOICE.state === "thinking") return;
@@ -165,7 +205,11 @@ function initVoice() {
   };
   $("#voiceMode").onchange = (e) => {
     VOICE.conversation = e.target.checked;
-    if (VOICE.conversation && VOICE.state === "idle") startListening();
+    if (VOICE.conversation && VOICE.state === "idle") {
+      startListening();
+    } else {
+      updateTaskbarVoice(VOICE.state);
+    }
   };
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === "m") { e.preventDefault(); $("#micBtn").click(); }

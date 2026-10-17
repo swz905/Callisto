@@ -10,6 +10,7 @@ all_chat.txt
 NEW_FEATURES.txt
 *.png
 !docs/*.png
+!kairos/hub/static/*.png
 avatar_crop.png
 *.key
 VPS_ACCESS.txt
