@@ -55,6 +55,8 @@ def result_message(tool: str, ok: bool, output: str, summary: str) -> str | None
         return f"Sent: {first}" if ok else f"Couldn't send the file: {first}"
     if tool == "send_clipboard":
         return "Clipboard sent." if ok else f"Couldn't read the clipboard: {first}"
+    if tool in ("read_notifications", "take_screenshot"):
+        return None if ok else f"That didn't work ({summary}): {first}"
     return None if ok else f"That didn't work ({summary}): {first}"
 
 
@@ -94,11 +96,26 @@ class Kairos:
         self.status = StatusTracker(self)
         self.telegram = None  # started by the hub when TELEGRAM_BOT_TOKEN is set
         self.devices: dict[str, str] = {}
+        self._action_waiters: dict[str, threading.Event] = {}
+        self._action_results: dict[str, tuple[bool, str]] = {}
         # Serialises graph writes (WS handlers, sim threads, ticks). LLM network calls happen outside it.
         self.lock = threading.RLock()
         self.refresh_devices()
         if self.llm.planner is not None:  # built-in tools + whatever MCP plugins are connected
             self.llm.planner.set_tools_provider(lambda: openai_tools() + self.plugins.specs())
+
+    def register_action_waiter(self, action_id: str) -> threading.Event:
+        ev = threading.Event()
+        self._action_waiters[action_id] = ev
+        return ev
+
+    def wait_for_device_result(self, action_id: str, timeout: float = 3.5) -> tuple[bool, str] | None:
+        ev = self._action_waiters.get(action_id)
+        if not ev:
+            return None
+        ev.wait(timeout=timeout)
+        self._action_waiters.pop(action_id, None)
+        return self._action_results.pop(action_id, None)
 
     def refresh_devices(self) -> None:
         try:
@@ -217,6 +234,9 @@ class Kairos:
         """A device reports the outcome of an exec/delete/download/upload/clipboard read: update the original
         Action and tell the user on the device the request came from (`origin_device`)."""
         with self.lock:
+            if hasattr(self, "_action_waiters") and action_id in self._action_waiters:
+                self._action_results[action_id] = (ok, output)
+                self._action_waiters[action_id].set()
             row = self.graph.one("get_action", id=action_id)
             if not row:
                 log.warning("result for unknown action %s", action_id)

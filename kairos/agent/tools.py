@@ -813,6 +813,10 @@ class Toolbox:
         if query:
             filter_parts.append(f"matching '{query}'")
         desc = (" for " + " and ".join(filter_parts)) if filter_parts else ""
+
+        if turn.action_id and hasattr(self.k, "register_action_waiter"):
+            self.k.register_action_waiter(turn.action_id)
+
         self.k.gateway.send(Outbound(
             kind="notifications_get",
             device_id=target,
@@ -820,11 +824,21 @@ class Toolbox:
             args={"app": app, "query": query, "limit": limit or 10},
             action_id=turn.action_id
         ))
+
+        if turn.action_id and hasattr(self.k, "wait_for_device_result"):
+            res = self.k.wait_for_device_result(turn.action_id, timeout=4.0)
+            if res:
+                ok, output = res
+                return ToolResult(output, {"app": app, "query": query, "output": output})
+
         return ToolResult(f"Checking PC notifications{desc} on {self._dev_name(target)}...",
                           {"app": app, "query": query, "dispatched": True})
 
     def t_take_screenshot(self, turn: Turn, device: str | None = None) -> ToolResult:
         target = self._resolve_device(device, self.k.devices.get("pc", turn.device_id))
+        if turn.action_id and hasattr(self.k, "register_action_waiter"):
+            self.k.register_action_waiter(turn.action_id)
+
         self.k.gateway.send(Outbound(
             kind="screenshot",
             device_id=target,
@@ -832,6 +846,13 @@ class Toolbox:
             args={},
             action_id=turn.action_id
         ))
+
+        if turn.action_id and hasattr(self.k, "wait_for_device_result"):
+            res = self.k.wait_for_device_result(turn.action_id, timeout=4.0)
+            if res:
+                ok, output = res
+                return ToolResult(output, {"output": output})
+
         return ToolResult(f"Capturing screenshot on {self._dev_name(target)}...", {"dispatched": True})
 
     # --- read-only web --------------------------------------------------------------------
