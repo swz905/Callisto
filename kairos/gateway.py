@@ -21,7 +21,7 @@ class LocalGateway:
     exec/delete report a (simulated) result back to their Action, so the full demo runs without hardware."""
 
     def __init__(self, printer: Callable[[str], None] = print, simulate: bool = True,
-                 emit: Callable[[EventEnvelope], None] | None = None, user_id: str = "arjun",
+                 emit: Callable[[EventEnvelope], None] | None = None, user_id: str = "shubhashish",
                  on_result: ResultCallback | None = None):
         self.printer = printer
         self.simulate = simulate
@@ -81,7 +81,7 @@ class LocalGateway:
 
     def _fake_download(self, msg: Outbound, seconds: float = 3.0) -> None:
         a = msg.args
-        path = f"C:\\Users\\arjun\\Downloads\\{a['filename']}"
+        path = f"C:\\Users\\shubhashish\\Downloads\\{a['filename']}"
         base = {"user_id": self.user_id, "device_id": msg.device_id, "source": "chrome"}
         self.emit(EventEnvelope(type="download.started", payload={
             "download_id": a["download_id"], "url": a["url"], "filename": a["filename"]}, **base))

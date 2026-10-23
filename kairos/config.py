@@ -95,7 +95,7 @@ def load_settings() -> Settings:
         falkordb_password=env("FALKORDB_PASSWORD") or None,
         falkordb_username=env("FALKORDB_USERNAME") or None,
         falkordb_ssl=env("FALKORDB_SSL", "0").lower() in ("1", "true", "yes"),
-        user_id=env("KAIROS_USER", "arjun"),
+        user_id=env("KAIROS_USER", "shubhashish"),
         tz=env("KAIROS_TZ", "Asia/Kolkata"),
         llm=env("KAIROS_LLM", "auto").lower(),
         openrouter_api_key=env("OPENROUTER_API_KEY") or None,

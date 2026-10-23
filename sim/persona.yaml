@@ -1,30 +1,21 @@
-# Synthetic demo persona. No real personal data goes into the graph.
+# Clean baseline persona for Shubhashish. No dummy demo data.
 user:
-  id: arjun
-  name: Arjun Mehta
+  id: shubhashish
+  name: Shubhashish
   tz: Asia/Kolkata
 
 devices:
-  - {id: phone-arjun, kind: phone, name: "Arjun's Pixel"}
-  - {id: pc-main, kind: pc, name: "Arjun's laptop"}
-  - {id: telegram-arjun, kind: chat, name: "Telegram"}
+  - {id: phone-shubhashish, kind: phone, name: "Shubhashish's Phone"}
+  - {id: pc-main, kind: pc, name: "Shubhashish's PC"}
+  - {id: telegram-shubhashish, kind: chat, name: "Telegram"}
 
-people:
-  - {id: person-rahul, name: Rahul Sharma, aliases: [Rahul], relation: manager}
-  - {id: person-priya, name: Priya Mehta, aliases: [Priya], relation: sister}
-  - {id: person-karan, name: Karan Gupta, aliases: [Karan], relation: colleague}
+people: []
 
-# Geofences for place watchers ("remind me when I leave the office"). Coordinates are illustrative.
-places:
-  - {id: place-home, name: Home, kind: home, lat: 28.4211, lon: 77.0717, radius_m: 250}
-  - {id: place-office, name: Office, kind: office, lat: 28.4595, lon: 77.0950, radius_m: 300}
+places: []
 
-facts:
-  - {key: office_location, statement: "Your office is at Golf Course Road"}
-  - {key: home_location, statement: "You live in Sector 56, Gurugram"}
+facts: []
 
-notes:
-  - {text: "Rahul prefers short decks with the numbers up front", about: [Rahul Sharma]}
+notes: []
 
 # Capability risk tiers: 0 read/notify, 1 low-risk write, 2 needs care, 3 always confirm.
 capabilities:
@@ -47,8 +38,6 @@ capabilities:
   - {name: net.read_unknown, risk: 2, description: "Read a web page from an address nobody gave us"}
 
 # Device -> capability -> mode (auto / confirm / deny). Missing edge = deny.
-# Requests that come in through a remote channel (Telegram) use the stricter of the channel's rule and the
-# target device's rule: e.g. "run X on my PC" from Telegram always asks first.
 permissions:
   pc-main:
     net.search: auto
@@ -68,7 +57,7 @@ permissions:
     shell.read: auto
     shell.exec: confirm
     file.delete: confirm
-  phone-arjun:
+  phone-shubhashish:
     net.search: auto
     net.read: auto
     net.read_unknown: confirm
@@ -84,8 +73,7 @@ permissions:
     file.transfer: auto
     clipboard: auto
     shell.read: confirm
-    # no shell.exec / file.delete on the phone: denied
-  telegram-arjun:
+  telegram-shubhashish:
     net.search: auto
     net.read: auto
     net.read_unknown: confirm

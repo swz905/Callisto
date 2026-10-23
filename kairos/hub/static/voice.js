@@ -121,7 +121,7 @@ async function stopListening(send) {
     return;
   }
   setVoiceState("thinking");
-  const device = state.devices[state.kind] || (state.kind === "phone" ? "phone-arjun" : "pc-main");
+  const device = state.devices[state.kind] || (state.kind === "phone" ? "phone-shubhashish" : "pc-main");
   try {
     const r = await fetch(`/api/voice?device_id=${encodeURIComponent(device)}`, { method: "POST", body: encodeWav(chunks, rate) });
     if (r.status === 503 && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {

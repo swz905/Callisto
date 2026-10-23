@@ -156,7 +156,7 @@ function addMsg(role, text, meta, confirm) {
 
 async function send(text) {
   if (!text.trim()) return;
-  const device = state.devices[state.kind] || (state.kind === "phone" ? "phone-arjun" : "pc-main");
+  const device = state.devices[state.kind] || (state.kind === "phone" ? "phone-shubhashish" : "pc-main");
   addMsg("user", text, `${state.kind === "phone" ? "📱" : "💻"} ${device}`);
   try {
     const r = await post("/chat", { device_id: device, text });
@@ -181,7 +181,7 @@ function initChat() {
     $$("#deviceSeg button").forEach((x) => x.classList.toggle("on", x === b));
     state.kind = b.dataset.kind;
   }));
-  addMsg("bot", "Hi Arjun. Ask me anything below, or play a simulator scenario to feed me events.");
+  addMsg("bot", "Hi Shubhashish. Ask me anything below, or talk to me.");
 }
 
 // ---------------------------------------------------------------- side panels
